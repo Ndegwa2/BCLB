@@ -1,0 +1,66 @@
+erDiagram
+    Users ||--o{ Wallet_Transactions : "has"
+    Users ||--o{ Game_Entries : "enters"
+    Users ||--o{ Games : "creates"
+    Users ||--|| Tournaments : "wins"
+    Users ||--|| Payments : "owns"
+    Games ||--o{ Game_Entries : "has entries"
+    Wallet_Transactions ||--|| Payments : "linked to"
+    
+    Users {
+        int id PK
+        string username
+        string email
+        string phone_number
+        string password
+        boolean is_admin
+    }
+    
+    Wallet_Transactions {
+        int id PK
+        decimal amount
+        string direction
+        string tx_type
+        string status
+        datetime created_at
+        string description
+        int user_id FK
+    }
+    
+    Games {
+        int id PK
+        string game_code
+        string game_type
+        decimal stake_amount
+        decimal total_pot
+        string status
+        datetime created_at
+        int creator_id FK
+    }
+    
+    Game_Entries {
+        int id PK
+        int user_id FK
+        int game_id FK
+        decimal stake_amount
+        datetime joined_at
+    }
+    
+    Tournaments {
+        int id PK
+        string name
+        string game_type
+        decimal entry_fee
+        int max_players
+        string status
+        int winner_id FK
+    }
+    
+    Payments {
+        transaction_id FK
+        string status
+        string message
+        int user_id FK
+        decimal amount
+        string phone_number
+    }
