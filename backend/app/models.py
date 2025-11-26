@@ -29,7 +29,7 @@ class User(db.Model):
     def check_password(self, password):
         return bcrypt.checkpw(password.encode('utf-8'), self.password.encode('utf-8'))
 
-    def to_dict(self):
+    def to_dict(self): #turns the encoded passwords to JSON serializable format.
         return {
             'id': self.id,
             'username': self.username,
