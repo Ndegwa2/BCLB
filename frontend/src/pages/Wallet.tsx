@@ -1,20 +1,9 @@
 import React, { useState } from 'react'
 import { useWallet } from '../contexts/WalletContext'
-import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 import { apiClient } from '../services/api'
 
 // Type definitions for better type safety
-interface Transaction {
-  id: string | number
-  tx_type: string
-  status: string
-  amount: number
-  direction: 'credit' | 'debit'
-  created_at: string
-  description?: string
-}
-
 interface TransactionStatus {
   text: string
   color: string
@@ -22,7 +11,6 @@ interface TransactionStatus {
 
 const Wallet: React.FC = () => {
   const { balance, lockedBalance, transactions, loading, error, refreshWallet } = useWallet()
-  const { state } = useAuth()
   const [depositAmount, setDepositAmount] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
