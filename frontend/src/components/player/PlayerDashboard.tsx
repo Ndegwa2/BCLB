@@ -1,26 +1,59 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWallet } from '../../contexts/WalletContext'
 import { useGame } from '../../contexts/GameContext'
+import { useNavigate } from 'react-router-dom'
+import { apiClient } from '../../services/api'
 import PlayerSidebar from './PlayerSidebar'
 import DashboardCard from './DashboardCard'
 import GameHistoryTable from './GameHistoryTable'
 
 const PlayerDashboard: React.FC = () => {
   const { state: authState } = useAuth()
-  const { 
-    balance, 
-    recentPayment, 
-    loading: walletLoading, 
-    error: walletError 
+  const {
+    balance,
+    recentPayment,
+    loading: walletLoading,
+    error: walletError
   } = useWallet()
-  const { 
-    gameHistory, 
-    activeGames, 
-    upcomingTournaments, 
-    loading: gameLoading, 
-    error: gameError 
+  const {
+    gameHistory,
+    activeGames,
+    upcomingTournaments,
+    loading: gameLoading,
+    error: gameError,
+    refreshGameData
   } = useGame()
+  const navigate = useNavigate()
+  const [creatingGame, setCreatingGame] = useState(false)
+
+  // Handle "Play Your First Game" button click
+  const handlePlayFirstGame = async () => {
+    try {
+      setCreatingGame(true)
+
+      // Create a new pool game
+      const response = await apiClient.post('/games', {
+        game_type: 'pool_8ball',
+        stake_amount: 0, // Free game for first time
+        is_free: true
+      })
+
+      const newGame = response.data.game
+
+      // Refresh game data to include the new game
+      await refreshGameData()
+
+      // Navigate to the new game
+      navigate(`/games/play/${newGame.id}`)
+
+    } catch (error) {
+      console.error('Error creating game:', error)
+      alert('Failed to create game. Please try again.')
+    } finally {
+      setCreatingGame(false)
+    }
+  }
 
   // Format game history for the table
   const formatGameHistory = () => {
@@ -150,8 +183,12 @@ const PlayerDashboard: React.FC = () => {
             ) : (
               <div className="bg-slate-900 rounded-2xl p-8 text-center">
                 <p className="text-slate-400 text-lg">No game history available</p>
-                <button className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  Play Your First Game
+                <button
+                  className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-800"
+                  onClick={handlePlayFirstGame}
+                  disabled={creatingGame}
+                >
+                  {creatingGame ? 'Creating Game...' : 'Play Your First Game'}
                 </button>
               </div>
             )}
@@ -187,6 +224,8 @@ const PlayerDashboard: React.FC = () => {
       </div>
     </div>
   )
+
+  return null
 }
 
 export default PlayerDashboard

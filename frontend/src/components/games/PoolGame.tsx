@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGame } from '../../contexts/GameContext';
 import { GameEntry, PoolGameState } from '../../types/game';
 import { User } from '../../types/auth';
+import * as Phaser from 'phaser';
+import * as Matter from 'matter-js';
 
 // Main Pool Game Component
 const PoolGame: React.FC = () => {
@@ -11,6 +13,8 @@ const PoolGame: React.FC = () => {
   const { state: authState } = useAuth();
   const { activeGames, loading, error } = useGame();
   const gameRef = useRef<HTMLDivElement>(null);
+  const phaserGameRef = useRef<Phaser.Game | null>(null);
+  const navigate = useNavigate();
 
   const [gameState, setGameState] = useState<PoolGameState>({
     status: 'loading',
@@ -23,6 +27,9 @@ const PoolGame: React.FC = () => {
     ballsPotted: { solids: 0, stripes: 0 },
     gameType: 'pool_8ball'
   });
+
+  const [gameStarted, setGameStarted] = useState(false);
+
 
   // Find the current game from context
   const currentGame = activeGames.find(g => g.id === Number(gameId));
@@ -93,8 +100,61 @@ const PoolGame: React.FC = () => {
     // Cleanup
     return () => {
       console.log('Cleaning up Pool Game');
+      if (phaserGameRef.current) {
+        phaserGameRef.current.destroy(true);
+        phaserGameRef.current = null;
+      }
     };
   }, [currentGame, authState.user]);
+
+  // Start the Phaser game
+  const startPhaserGame = () => {
+    if (!gameRef.current || !currentGame) return;
+
+    setGameStarted(true);
+    setGameState(prev => ({ ...prev, status: 'in_progress' }));
+
+    // Game configuration
+    const config: Phaser.Types.Core.GameConfig = {
+      type: Phaser.AUTO,
+      width: gameRef.current.clientWidth,
+      height: gameRef.current.clientHeight,
+      parent: gameRef.current,
+      backgroundColor: '#2e7d32',
+      physics: {
+        default: 'matter',
+        matter: {
+          gravity: { y: 0, x: 0 },
+          debug: true // Show physics debug for development
+        }
+      },
+      scene: [PoolGameScene]
+    };
+
+    // Create Phaser game instance
+    phaserGameRef.current = new Phaser.Game(config);
+
+    // Pass game data to the scene
+    (phaserGameRef.current.scene.scenes[0] as any).gameData = {
+      gameId: currentGame.id,
+      players: gameState.players,
+      currentUserId: authState.user?.id,
+      gameType: currentGame.game_type
+    };
+  };
+
+  const handleForfeit = () => {
+    if (window.confirm('Are you sure you want to forfeit this game?')) {
+      // TODO: Implement forfeit logic
+      console.log('Game forfeited');
+      navigate('/games');
+    }
+  };
+
+  const handlePause = () => {
+    // TODO: Implement pause logic
+    console.log('Game paused');
+  };
 
   if (loading) {
     return <div className="text-center py-8">Loading game...</div>;
@@ -143,13 +203,31 @@ const PoolGame: React.FC = () => {
       <div className="absolute bottom-4 left-4 right-4 z-10">
         <div className="bg-black bg-opacity-70 p-4 rounded-lg">
           <div className="text-white text-center">
-            {gameState.status === 'ready' && (
+            {gameState.status === 'ready' && !gameStarted && (
               <button
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold"
-                onClick={() => console.log('Start game clicked')}
+                onClick={startPhaserGame}
+                disabled={gameState.players.length < 2}
               >
                 Start Game
               </button>
+            )}
+  
+            {gameStarted && (
+              <div className="flex justify-center space-x-4">
+                <button
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
+                  onClick={handleForfeit}
+                >
+                  Forfeit
+                </button>
+                <button
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"
+                  onClick={handlePause}
+                >
+                  Pause
+                </button>
+              </div>
             )}
           </div>
         </div>
