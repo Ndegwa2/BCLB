@@ -14,18 +14,21 @@ import GamePlay from './pages/GamePlay'
 import Tournaments from './pages/Tournaments'
 import Wallet from './pages/Wallet'
 import Profile from './pages/Profile'
+import AdminDashboard from './pages/AdminDashboard'
 import NotFound from './pages/NotFound'
 
 // Components
 import AuthGuard from './components/auth/AuthGuard'
-import LoadingSpinner from './components/ui/LoadingSpinner'
+import { LoadingSpinner } from './components/ui/LoadingSpinner'
 import ErrorBoundary from './components/ErrorBoundary'
 
 // Hooks
-import { useAuth } from './hooks/useAuth'
+import { useAuth } from './contexts/AuthContext'
 
 // Styles
 import './styles/globals.css'
+
+
 
 const AppContent: React.FC = () => {
   const { state } = useAuth()
@@ -47,7 +50,7 @@ const AppContent: React.FC = () => {
       {/* Protected routes */}
       <Route path="/dashboard" element={
         <AuthGuard>
-          <Dashboard />
+          {state.user?.is_admin ? <AdminDashboard /> : <Dashboard />}
         </AuthGuard>
       } />
       
@@ -78,6 +81,33 @@ const AppContent: React.FC = () => {
       <Route path="/profile" element={
         <AuthGuard>
           <Profile />
+        </AuthGuard>
+      } />
+      
+      {/* Admin Routes - redirect to dashboard for admin users */}
+      <Route path="/admin" element={
+        <AuthGuard requireAdmin={true}>
+          <Navigate to="/dashboard" />
+        </AuthGuard>
+      } />
+      <Route path="/admin/users" element={
+        <AuthGuard requireAdmin={true}>
+          <Navigate to="/dashboard" />
+        </AuthGuard>
+      } />
+      <Route path="/admin/games" element={
+        <AuthGuard requireAdmin={true}>
+          <Navigate to="/dashboard" />
+        </AuthGuard>
+      } />
+      <Route path="/admin/tournaments" element={
+        <AuthGuard requireAdmin={true}>
+          <Navigate to="/dashboard" />
+        </AuthGuard>
+      } />
+      <Route path="/admin/wallet" element={
+        <AuthGuard requireAdmin={true}>
+          <Navigate to="/dashboard" />
         </AuthGuard>
       } />
       

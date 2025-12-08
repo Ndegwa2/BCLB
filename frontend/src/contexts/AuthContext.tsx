@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react'
-import { User, AuthState, LoginCredentials, RegisterCredentials, AuthResponse } from '../types/auth'
+import { AuthState, LoginCredentials, RegisterCredentials, AuthResponse } from '../types/auth'
 import { authAPI } from '../services/auth'
 import { authStorage } from '../utils/storage'
 
@@ -11,7 +11,7 @@ interface AuthContextType {
   refreshToken: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 type AuthAction =
   | { type: 'LOGIN_START' }
@@ -102,8 +102,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const token = authStorage.getToken()
       if (token) {
         const response = await authAPI.verifyToken(token)
-        authStorage.setToken(response.token)
-        dispatch({ type: 'LOGIN_SUCCESS', payload: response })
+        // Keep the existing token since the backend doesn't return a new one for /auth/me
+        authStorage.setToken(token)
+        dispatch({ type: 'LOGIN_SUCCESS', payload: { token, user: response.user } })
       }
     } catch (error) {
       logout()

@@ -16,11 +16,11 @@ export const authAPI = {
     await apiClient.post('/auth/logout')
   },
 
-  verifyToken: async (token: string): Promise<AuthResponse> => {
+  verifyToken: async (token: string): Promise<{ user: any }> => {
     const response = await apiClient.get('/auth/me', {
       headers: { Authorization: `Bearer ${token}` }
     })
-    return response.data
+    return { user: response.data.user }
   },
 
   getCurrentUser: async (): Promise<any> => {
