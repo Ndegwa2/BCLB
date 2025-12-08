@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useWallet } from '../contexts/WalletContext'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
@@ -22,7 +22,7 @@ interface TransactionStatus {
 
 const Wallet: React.FC = () => {
   const { balance, lockedBalance, transactions, loading, error, refreshWallet } = useWallet()
-  const { state: authState } = useAuth()
+  const { state } = useAuth()
   const [depositAmount, setDepositAmount] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
