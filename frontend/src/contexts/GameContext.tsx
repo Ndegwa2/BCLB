@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { apiClient } from '../services/api'
 import { useAuth } from './AuthContext'
+import { GameEntry } from '../types/game'
 
 interface Game {
   id: number
@@ -10,12 +11,14 @@ interface Game {
   stake_amount: number
   total_pot: number
   created_at: string
+  creator_id: number
   my_entry?: {
     id: number
     result: 'win' | 'loss'
     stake_amount: number
     joined_at: string
   }
+  entries?: GameEntry[]
 }
 
 interface GameContextType {

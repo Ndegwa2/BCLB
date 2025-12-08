@@ -1,0 +1,61 @@
+import { User } from './auth';
+
+export interface GameEntry {
+  id: number;
+  user_id: number;
+  game_id: number;
+  stake_amount: number;
+  joined_at: string;
+  result: 'win' | 'loss' | 'draw' | null;
+  payout_amount: number;
+  created_at: string;
+  updated_at: string;
+  username?: string;
+  user?: User | null;
+}
+
+export interface GameEntryWithUser extends GameEntry {
+  user: User;
+}
+
+export interface PoolGameState {
+  status: 'loading' | 'ready' | 'in_progress' | 'completed' | 'error';
+  currentPlayer: number | null;
+  players: Array<{
+    id: number;
+    username: string;
+    isCurrentUser: boolean;
+    userId: number;
+  }>;
+  score: {
+    player1: number;
+    player2: number;
+  };
+  gameOver: boolean;
+  winner: number | null;
+  currentTurn: number | null;
+  ballsPotted: {
+    solids: number;
+    stripes: number;
+  };
+  gameType: 'pool_8ball' | 'draw_1v1' | 'card_blackjack' | 'tournament_single_elimination';
+}
+
+export interface PoolBall {
+  id: number;
+  type: 'cue' | 'solid' | 'stripe' | 'eight';
+  number: number;
+  x: number;
+  y: number;
+  pocketed: boolean;
+  physicsBody: any;
+}
+
+export interface PoolGameConfig {
+  tableWidth: number;
+  tableHeight: number;
+  ballRadius: number;
+  pocketRadius: number;
+  cuePower: number;
+  maxPower: number;
+}
