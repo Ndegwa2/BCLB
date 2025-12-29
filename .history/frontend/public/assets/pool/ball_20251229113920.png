@@ -1,0 +1,3 @@
+# This is a placeholder for the pool ball image
+# In a real implementation, you would have actual PNG/JPG image files here
+# For now, the game will use fallback rendering with colored circles
