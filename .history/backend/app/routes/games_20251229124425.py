@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from ..models import Game, GameEntry, User, WalletTransaction, db
 from ..auth import require_auth
+from ..services.ai_opponent import get_ai_opponent
 from sqlalchemy import func
 import random
 import string
@@ -21,6 +22,12 @@ def create_game():
     game_type = data['game_type'].strip().lower()
     stake_amount = data.get('stake_amount', 0)
     is_free = data.get('is_free', False)
+    allow_ai = data.get('allow_ai', False)
+    ai_difficulty = data.get('ai_difficulty', 'medium')
+
+    # Validate AI settings
+    if allow_ai and ai_difficulty not in ['easy', 'medium', 'hard']:
+        return jsonify({'error': 'Invalid AI difficulty. Must be one of: easy, medium, hard'}), 400
 
     # Validate game type
     valid_game_types = ['draw_1v1', 'pool_8ball', 'card_blackjack', 'tournament_single_elimination']
@@ -75,6 +82,7 @@ def create_game():
         stake_amount=stake_amount,
         total_pot=stake_amount if not is_free else 0,
         status='waiting',
+        allow_ai=allow_ai,
         creator_id=user.id
     )
 
@@ -90,6 +98,24 @@ def create_game():
     )
 
     db.session.add(entry)
+    
+    # If AI is allowed, assign an AI opponent immediately
+    if allow_ai:
+        # Find available AI bot with specified difficulty
+        ai_bot = User.query.filter_by(is_ai=True, ai_difficulty=ai_difficulty).first()
+        if ai_bot:
+            # Create game entry for AI opponent
+            ai_entry = GameEntry(
+                user_id=ai_bot.id,
+                game_id=game.id,
+                stake_amount=stake_amount,
+                joined_at=datetime.utcnow()
+            )
+            db.session.add(ai_entry)
+            
+            # Update game with AI opponent ID
+            game.ai_opponent_id = ai_bot.id
+    
     db.session.commit()
 
     return jsonify({

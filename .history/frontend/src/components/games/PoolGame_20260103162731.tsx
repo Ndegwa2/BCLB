@@ -280,38 +280,6 @@ const PoolGame: React.FC = () => {
               >
                 Manual Pocket Test
               </button>
-              <button
-                onClick={() => {
-                  // Aggressive pocket positioning test
-                  const scene = phaserGameRef.current?.scene.scenes[0] as any;
-                  if (scene) {
-                    console.log('=== AGGRESSIVE POCKET POSITION TEST ===');
-                    
-                    // Get the first non-cue ball and move it near a pocket
-                    const testBall = scene.balls?.find((ball: any) =>
-                      ball.getData('type') !== 'cue' && ball.active
-                    );
-                    
-                    if (testBall) {
-                      console.log('Moving ball near pocket for distance detection...');
-                      // Position ball very close to top-left pocket
-                      const pocketX = scene.scale.width * 0.18;
-                      const pocketY = scene.scale.height * 0.22;
-                      
-                      testBall.setVelocity(0, 0);
-                      testBall.setPosition(pocketX + 25, pocketY + 25);
-                      
-                      console.log(`Ball positioned at: (${pocketX + 25}, ${pocketY + 25})`);
-                      console.log('This should trigger aggressive pocket detection within 30 pixels!');
-                    } else {
-                      console.log('No active balls found to test!');
-                    }
-                  }
-                }}
-                className="px-2 py-1 bg-purple-600 text-white text-xs rounded"
-              >
-                Aggressive Pocket Test
-              </button>
             </div>
           </div>
         )}
@@ -1778,9 +1746,6 @@ class PoolGameScene extends Phaser.Scene {
     // Continuously validate ball boundaries to prevent balls from escaping
     this.validateBallBoundaries();
 
-    // AGGRESSIVE POCKET DETECTION - Check if balls are close to pockets
-    this.checkDistanceBasedPocketDetection();
-
     // Update game logic each frame
     if (this.cueBall && (this.cueBall.body as any).speed < 0.1 && !this.isAiming) {
       // All balls have stopped, check if we should switch turns
@@ -1805,38 +1770,6 @@ class PoolGameScene extends Phaser.Scene {
       const pulse = Math.sin(Date.now() * 0.005) * 10 + 10;
       this.powerIndicator.setSize(this.powerIndicator.width, pulse);
     }
-  }
-
-  private checkDistanceBasedPocketDetection() {
-    // Fallback distance-based pocket detection
-    const pocketPositions = [
-      { x: this.scale.width * 0.18, y: this.scale.height * 0.22 },
-      { x: this.scale.width * 0.5, y: this.scale.height * 0.22 - 10 },
-      { x: this.scale.width * 0.82, y: this.scale.height * 0.22 },
-      { x: this.scale.width * 0.18, y: this.scale.height * 0.78 },
-      { x: this.scale.width * 0.5, y: this.scale.height * 0.78 + 10 },
-      { x: this.scale.width * 0.82, y: this.scale.height * 0.78 }
-    ];
-
-    this.balls.forEach(ball => {
-      if (!ball || !ball.active || ball.getData('type') === 'cue') return;
-
-      const ballType = ball.getData('type');
-      const ballNumber = ball.getData('number');
-
-      // Check distance to each pocket
-      for (let i = 0; i < pocketPositions.length; i++) {
-        const pocket = pocketPositions[i];
-        const distance = Phaser.Math.Distance.Between(ball.x, ball.y, pocket.x, pocket.y);
-        
-        // If ball is very close to pocket (within 30 pixels), trigger potting
-        if (distance < 30) {
-          console.log(`🎱 AGGRESSIVE POCKET DETECTION: Ball ${ballNumber} (${ballType}) detected near pocket ${i}! Distance: ${distance.toFixed(2)}`);
-          this.handleBallPocketed(ball);
-          break;
-        }
-      }
-    });
   }
 }
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 import bcrypt
-from .. import db
+from ..models import db
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -11,6 +11,8 @@ class User(db.Model):
     phone_number = db.Column(db.String(15), nullable=False)
     password = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
+    is_ai = db.Column(db.Boolean, default=False)
+    ai_difficulty = db.Column(db.String(20), default='medium')  # 'easy', 'medium', 'hard'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -32,8 +32,6 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onJoin, onView }) => {
         return { icon: '🎱', color: 'bg-yellow-500', label: 'Pool 8ball' }
       case 'card_blackjack':
         return { icon: '🃏', color: 'bg-purple-500', label: 'Blackjack' }
-      case 'poker_texas_holdem':
-        return { icon: '♠️', color: 'bg-red-500', label: 'Texas Hold\'em' }
       default:
         return { icon: '🎮', color: 'bg-gray-500', label: type }
     }

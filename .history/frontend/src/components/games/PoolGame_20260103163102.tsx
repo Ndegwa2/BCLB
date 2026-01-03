@@ -280,38 +280,6 @@ const PoolGame: React.FC = () => {
               >
                 Manual Pocket Test
               </button>
-              <button
-                onClick={() => {
-                  // Aggressive pocket positioning test
-                  const scene = phaserGameRef.current?.scene.scenes[0] as any;
-                  if (scene) {
-                    console.log('=== AGGRESSIVE POCKET POSITION TEST ===');
-                    
-                    // Get the first non-cue ball and move it near a pocket
-                    const testBall = scene.balls?.find((ball: any) =>
-                      ball.getData('type') !== 'cue' && ball.active
-                    );
-                    
-                    if (testBall) {
-                      console.log('Moving ball near pocket for distance detection...');
-                      // Position ball very close to top-left pocket
-                      const pocketX = scene.scale.width * 0.18;
-                      const pocketY = scene.scale.height * 0.22;
-                      
-                      testBall.setVelocity(0, 0);
-                      testBall.setPosition(pocketX + 25, pocketY + 25);
-                      
-                      console.log(`Ball positioned at: (${pocketX + 25}, ${pocketY + 25})`);
-                      console.log('This should trigger aggressive pocket detection within 30 pixels!');
-                    } else {
-                      console.log('No active balls found to test!');
-                    }
-                  }
-                }}
-                className="px-2 py-1 bg-purple-600 text-white text-xs rounded"
-              >
-                Aggressive Pocket Test
-              </button>
             </div>
           </div>
         )}

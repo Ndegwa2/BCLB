@@ -154,14 +154,13 @@ const PoolGame: React.FC = () => {
 
       // Pass game data to the scene
       if (phaserGameRef.current && phaserGameRef.current.scene.scenes.length > 0) {
-        const scene = phaserGameRef.current.scene.scenes[0] as any;
-        scene.gameData = {
+        (phaserGameRef.current.scene.scenes[0] as any).gameData = {
           gameId: currentGame.id,
           players: gameState.players,
           currentUserId: authState.user?.id,
           gameType: currentGame.game_type
         };
-        console.log('Game data passed to scene successfully:', scene.gameData);
+        console.log('Game data passed to scene successfully');
       } else {
         console.error('Failed to access game scene');
       }
@@ -238,99 +237,22 @@ const PoolGame: React.FC = () => {
           <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white p-3 rounded-lg z-10">
             <p className="font-bold">🎯 Your Turn</p>
             <p className="text-sm">Click near the white ball to aim</p>
-            <div className="flex flex-col gap-2 mt-2">
-              <button
-                onClick={() => {
-                  // Test shot button for debugging
-                  const scene = phaserGameRef.current?.scene.scenes[0] as any;
-                  if (scene && scene.cueBall) {
-                    scene.cueBall.setVelocity(5, 0); // Simple test shot
-                    console.log('Test shot fired!');
-                  }
-                }}
-                className="px-2 py-1 bg-blue-600 text-white text-xs rounded"
-              >
-                Test Shot
-              </button>
-              <button
-                onClick={() => {
-                  // Manual pocket test button
-                  const scene = phaserGameRef.current?.scene.scenes[0] as any;
-                  if (scene) {
-                    console.log('=== MANUAL POCKET TEST ===');
-                    console.log('Balls:', scene.balls?.length || 0);
-                    console.log('Pockets:', scene.pockets?.length || 0);
-                    
-                    // Test if balls can be manually pocketed
-                    const testBall = scene.balls?.find((ball: any) =>
-                      ball.getData('type') !== 'cue' && ball.active
-                    );
-                    
-                    if (testBall) {
-                      console.log('Manually pocketing ball:', testBall.getData('number'));
-                      testBall.setVelocity(0, 0);
-                      testBall.setPosition(scene.scale.width * 0.5, scene.scale.height * 0.5);
-                      scene.handleBallPocketed(testBall);
-                    } else {
-                      console.log('No active balls found to test!');
-                    }
-                  }
-                }}
-                className="px-2 py-1 bg-red-600 text-white text-xs rounded"
-              >
-                Manual Pocket Test
-              </button>
-              <button
-                onClick={() => {
-                  // Aggressive pocket positioning test
-                  const scene = phaserGameRef.current?.scene.scenes[0] as any;
-                  if (scene) {
-                    console.log('=== AGGRESSIVE POCKET POSITION TEST ===');
-                    
-                    // Get the first non-cue ball and move it near a pocket
-                    const testBall = scene.balls?.find((ball: any) =>
-                      ball.getData('type') !== 'cue' && ball.active
-                    );
-                    
-                    if (testBall) {
-                      console.log('Moving ball near pocket for distance detection...');
-                      // Position ball very close to top-left pocket
-                      const pocketX = scene.scale.width * 0.18;
-                      const pocketY = scene.scale.height * 0.22;
-                      
-                      testBall.setVelocity(0, 0);
-                      testBall.setPosition(pocketX + 25, pocketY + 25);
-                      
-                      console.log(`Ball positioned at: (${pocketX + 25}, ${pocketY + 25})`);
-                      console.log('This should trigger aggressive pocket detection within 30 pixels!');
-                    } else {
-                      console.log('No active balls found to test!');
-                    }
-                  }
-                }}
-                className="px-2 py-1 bg-purple-600 text-white text-xs rounded"
-              >
-                Aggressive Pocket Test
-              </button>
-            </div>
           </div>
         )}
 
         {/* Game Canvas will go here */}
-        {!gameStarted && (
-          <div className="pool-game-loading">
-            <div className="pool-loading-content">
-              <h3 className="text-2xl mb-4">8-Ball Pool Loading...</h3>
-              <p>Game Type: {currentGame.game_type}</p>
-              <p>Players: {gameState.players.length}/2</p>
-              {gameState.players.map((player: any) => (
-                <div key={player.userId} className={`mt-2 ${player.isCurrentUser ? 'pool-player-current' : 'pool-player-info'}`}>
-                  {player.username} {player.isCurrentUser && '(You)'}
-                </div>
-              ))}
-            </div>
+        <div className="pool-game-loading">
+          <div className="pool-loading-content">
+            <h3 className="text-2xl mb-4">8-Ball Pool Loading...</h3>
+            <p>Game Type: {currentGame.game_type}</p>
+            <p>Players: {gameState.players.length}/2</p>
+            {gameState.players.map((player: any) => (
+              <div key={player.userId} className={`mt-2 ${player.isCurrentUser ? 'pool-player-current' : 'pool-player-info'}`}>
+                {player.username} {player.isCurrentUser && '(You)'}
+              </div>
+            ))}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Game Controls */}
@@ -559,106 +481,28 @@ class PoolGameScene extends Phaser.Scene {
       this.scale.height * 0.75,
       borderColor
     );
-
-    // Add physics walls to keep balls within table boundaries
-    this.createTableWalls();
-  }
-
-  private createTableWalls() {
-    // Define table boundaries (playable area)
-    const tableLeft = this.scale.width * 0.15;   // Left boundary
-    const tableRight = this.scale.width * 0.85;  // Right boundary
-    const tableTop = this.scale.height * 0.2;    // Top boundary
-    const tableBottom = this.scale.height * 0.8; // Bottom boundary
-    const wallThickness = 10;
-
-    // Top wall
-    this.matter.add.rectangle(
-      (tableLeft + tableRight) / 2,
-      tableTop - wallThickness / 2,
-      tableRight - tableLeft,
-      wallThickness,
-      {
-        isStatic: true,
-        label: 'table-wall',
-        restitution: 0.8,
-        friction: 0.1
-      }
-    );
-
-    // Bottom wall
-    this.matter.add.rectangle(
-      (tableLeft + tableRight) / 2,
-      tableBottom + wallThickness / 2,
-      tableRight - tableLeft,
-      wallThickness,
-      {
-        isStatic: true,
-        label: 'table-wall',
-        restitution: 0.8,
-        friction: 0.1
-      }
-    );
-
-    // Left wall
-    this.matter.add.rectangle(
-      tableLeft - wallThickness / 2,
-      (tableTop + tableBottom) / 2,
-      wallThickness,
-      tableBottom - tableTop,
-      {
-        isStatic: true,
-        label: 'table-wall',
-        restitution: 0.8,
-        friction: 0.1
-      }
-    );
-
-    // Right wall
-    this.matter.add.rectangle(
-      tableRight + wallThickness / 2,
-      (tableTop + tableBottom) / 2,
-      wallThickness,
-      tableBottom - tableTop,
-      {
-        isStatic: true,
-        label: 'table-wall',
-        restitution: 0.8,
-        friction: 0.1
-      }
-    );
-
-    console.log('Table walls created for boundary validation');
   }
 
   private createPockets() {
-    const pocketSize = 60; // Increased pocket size for better detection
+    const pocketSize = 40;
     const pocketColor = 0x000000;
 
-    // Define safe boundaries (same as ball boundaries)
-    const safeLeft = this.scale.width * 0.18;
-    const safeRight = this.scale.width * 0.82;
-    const safeTop = this.scale.height * 0.22;
-    const safeBottom = this.scale.height * 0.78;
-
-    // Create 6 pockets positioned INSIDE the table boundaries for realistic potting
+    // Create 6 pockets (standard pool table layout)
     const pocketPositions = [
-      { x: safeLeft, y: safeTop }, // Top left - inside boundary
-      { x: this.scale.width * 0.5, y: safeTop - 10 }, // Top center - slightly inside
-      { x: safeRight, y: safeTop }, // Top right - inside boundary
-      { x: safeLeft, y: safeBottom }, // Bottom left - inside boundary
-      { x: this.scale.width * 0.5, y: safeBottom + 10 }, // Bottom center - slightly inside
-      { x: safeRight, y: safeBottom }  // Bottom right - inside boundary
+      { x: this.scale.width * 0.1, y: this.scale.height * 0.15 }, // Top left
+      { x: this.scale.width * 0.5, y: this.scale.height * 0.15 }, // Top center
+      { x: this.scale.width * 0.9, y: this.scale.height * 0.15 }, // Top right
+      { x: this.scale.width * 0.1, y: this.scale.height * 0.85 }, // Bottom left
+      { x: this.scale.width * 0.5, y: this.scale.height * 0.85 }, // Bottom center
+      { x: this.scale.width * 0.9, y: this.scale.height * 0.85 }  // Bottom right
     ];
 
     pocketPositions.forEach((pos, index) => {
-      // Create visible pocket (dark circle)
       const pocket = this.add.circle(pos.x, pos.y, pocketSize, pocketColor);
-      pocket.setDepth(-1); // Put pockets behind balls
       (this.pockets as any).push(pocket);
 
-      // Add physics sensor for ball detection - larger detection area
-      const pocketSensor = this.matter.add.circle(pos.x, pos.y, pocketSize * 0.8, {
+      // Add physics sensor for ball detection
+      this.matter.add.circle(pos.x, pos.y, pocketSize * 0.8, {
         isSensor: true,
         label: `pocket-${index}`,
         collisionFilter: {
@@ -666,86 +510,37 @@ class PoolGameScene extends Phaser.Scene {
           mask: 0x0001
         }
       });
-
-      // Add debug visual for sensor area (temporary)
-      const debugSensor = this.add.circle(pos.x, pos.y, pocketSize * 0.8, 0xFF0000, 0.2);
-      debugSensor.setDepth(-2);
-      
-      // Remove debug visual after 3 seconds
-      setTimeout(() => {
-        debugSensor.destroy();
-      }, 3000);
-
-      console.log(`Pocket ${index} created at:`, {
-        x: pos.x,
-        y: pos.y,
-        sensorRadius: pocketSize * 0.8,
-        ballCategory: '0x0001',
-        pocketCategory: '0x0002'
-      });
     });
-
-    console.log('Pockets created inside table boundaries for realistic potting');
   }
 
   private createBalls() {
     const ballRadius = 20;
     const ballPositions = this.getBallRackPositions();
-    
-    // Define safe boundary for ball placement (matching wall boundaries)
-    const safeLeft = this.scale.width * 0.18;   // Safe left boundary
-    const safeRight = this.scale.width * 0.82;  // Safe right boundary
-    const safeTop = this.scale.height * 0.22;   // Safe top boundary
-    const safeBottom = this.scale.height * 0.78; // Safe bottom boundary
 
-    // Create cue ball (white) - enhanced visibility with glow effect
+    // Create cue ball (white) - always use graphics for visibility
     const cueBallGraphics = this.add.graphics();
-    
-    // Add glow effect
-    cueBallGraphics.fillStyle(0xFFFFFF, 0.3);
-    cueBallGraphics.fillCircle(0, 0, ballRadius + 5);
-    
-    // Main ball
     cueBallGraphics.fillStyle(0xFFFFFF, 1);
     cueBallGraphics.fillCircle(0, 0, ballRadius);
-    
-    // Border
-    cueBallGraphics.lineStyle(3, 0xCCCCCC, 1);
+    cueBallGraphics.lineStyle(2, 0xCCCCCC, 1);
     cueBallGraphics.strokeCircle(0, 0, ballRadius);
-    
-    // Add subtle shadow
-    cueBallGraphics.lineStyle(1, 0x999999, 0.5);
-    cueBallGraphics.strokeCircle(2, 2, ballRadius - 2);
     
     const cueBallTexture = cueBallGraphics.generateTexture('cueBallTexture', ballRadius * 2, ballRadius * 2);
     cueBallGraphics.destroy();
 
-    // Position cue ball within safe boundaries
-    const cueBallX = Math.min(Math.max(this.scale.width * 0.75, safeLeft + ballRadius), safeRight - ballRadius);
-    const cueBallY = Math.min(Math.max(this.scale.height * 0.5, safeTop + ballRadius), safeBottom - ballRadius);
-
     const cueBall = this.matter.add.image(
-      cueBallX,
-      cueBallY,
+      this.scale.width * 0.75,
+      this.scale.height * 0.5,
       'cueBallTexture'
     ) as Phaser.Physics.Matter.Sprite;
 
-    // Better physics settings for better ball movement
     cueBall.setCircle(ballRadius);
-    cueBall.setFriction(0.01); // Lower friction for smoother movement
-    cueBall.setFrictionAir(0.02); // Air resistance
-    (cueBall.body as any).restitution = 0.9; // Higher bounce
+    cueBall.setFriction(0.02);
+    (cueBall.body as any).restitution = 0.8;
     cueBall.setMass(1);
-    cueBall.setBounce(0.9);
     cueBall.setCollisionCategory(0x0001);
-    cueBall.setCollidesWith(0x0001 | 0x0002); // Collide with balls and pockets
+    cueBall.setCollidesWith(0x0001);
     cueBall.setData('type', 'cue');
     cueBall.setData('number', 0);
-    
-    console.log('Cue ball created with collision category 0x0001, collides with 0x0001 | 0x0002');
-    
-    // Make sure the cue ball is interactive
-    cueBall.setInteractive({ useHandCursor: true });
 
     this.cueBall = cueBall;
     this.balls.push(cueBall);
@@ -803,11 +598,9 @@ class PoolGameScene extends Phaser.Scene {
       (ball.body as any).restitution = 0.8;
       ball.setMass(1);
       ball.setCollisionCategory(0x0001);
-      ball.setCollidesWith(0x0001 | 0x0002); // Collide with balls (0x0001) and pockets (0x0002)
+      ball.setCollidesWith(0x0001);
       ball.setData('type', ballConfig.type);
       ball.setData('number', ballConfig.number);
-
-      console.log(`Ball ${ballConfig.number} (${ballConfig.type}) created with collision category 0x0001`);
 
       this.balls.push(ball);
     });
@@ -815,14 +608,6 @@ class PoolGameScene extends Phaser.Scene {
 
   private getBallRackPositions(): {x: number, y: number}[] {
     const positions: {x: number, y: number}[] = [];
-    const ballRadius = 20;
-    
-    // Define safe boundaries for ball placement
-    const safeLeft = this.scale.width * 0.18;   // Safe left boundary
-    const safeRight = this.scale.width * 0.82;  // Safe right boundary
-    const safeTop = this.scale.height * 0.22;   // Safe top boundary
-    const safeBottom = this.scale.height * 0.78; // Safe bottom boundary
-    
     const centerX = this.scale.width * 0.25;
     const centerY = this.scale.height * 0.5;
     const ballSpacing = 30;
@@ -831,82 +616,77 @@ class PoolGameScene extends Phaser.Scene {
     // Standard 8-ball triangle rack with 15 balls
     // 8-ball in center of triangle
 
-    const rawPositions = [
-      // Row 1 (1 ball)
-      { x: centerX, y: centerY - ballSpacing * 3 },
-      
-      // Row 2 (2 balls)
-      { x: centerX - ballSpacing/2, y: centerY - ballSpacing * 2 },
-      { x: centerX + ballSpacing/2, y: centerY - ballSpacing * 2 },
-      
-      // Row 3 (3 balls)
-      { x: centerX - ballSpacing, y: centerY - ballSpacing },
-      { x: centerX, y: centerY - ballSpacing },
-      { x: centerX + ballSpacing, y: centerY - ballSpacing },
-      
-      // Row 4 (4 balls)
-      { x: centerX - ballSpacing * 1.5, y: centerY },
-      { x: centerX - ballSpacing * 0.5, y: centerY },
-      { x: centerX + ballSpacing * 0.5, y: centerY },
-      { x: centerX + ballSpacing * 1.5, y: centerY },
-      
-      // Row 5 (5 balls)
-      { x: centerX - ballSpacing * 2, y: centerY + ballSpacing },
-      { x: centerX - ballSpacing, y: centerY + ballSpacing },
-      { x: centerX, y: centerY + ballSpacing },
-      { x: centerX + ballSpacing, y: centerY + ballSpacing },
-      { x: centerX + ballSpacing * 2, y: centerY + ballSpacing }
-    ];
+    // Row 1 (1 ball)
+    positions.push({
+      x: centerX,
+      y: centerY - ballSpacing * 3
+    });
 
-    // Ensure all positions are within safe boundaries
-    rawPositions.forEach(pos => {
-      positions.push({
-        x: Math.min(Math.max(pos.x, safeLeft + ballRadius), safeRight - ballRadius),
-        y: Math.min(Math.max(pos.y, safeTop + ballRadius), safeBottom - ballRadius)
-      });
+    // Row 2 (2 balls)
+    positions.push({
+      x: centerX - ballSpacing/2,
+      y: centerY - ballSpacing * 2
+    });
+    positions.push({
+      x: centerX + ballSpacing/2,
+      y: centerY - ballSpacing * 2
+    });
+
+    // Row 3 (3 balls)
+    positions.push({
+      x: centerX - ballSpacing,
+      y: centerY - ballSpacing
+    });
+    positions.push({
+      x: centerX,
+      y: centerY - ballSpacing
+    });
+    positions.push({
+      x: centerX + ballSpacing,
+      y: centerY - ballSpacing
+    });
+
+    // Row 4 (4 balls)
+    positions.push({
+      x: centerX - ballSpacing * 1.5,
+      y: centerY
+    });
+    positions.push({
+      x: centerX - ballSpacing * 0.5,
+      y: centerY
+    });
+    positions.push({
+      x: centerX + ballSpacing * 0.5,
+      y: centerY
+    });
+    positions.push({
+      x: centerX + ballSpacing * 1.5,
+      y: centerY
+    });
+
+    // Row 5 (5 balls)
+    positions.push({
+      x: centerX - ballSpacing * 2,
+      y: centerY + ballSpacing
+    });
+    positions.push({
+      x: centerX - ballSpacing,
+      y: centerY + ballSpacing
+    });
+    positions.push({
+      x: centerX,
+      y: centerY + ballSpacing
+    });
+    positions.push({
+      x: centerX + ballSpacing,
+      y: centerY + ballSpacing
+    });
+    positions.push({
+      x: centerX + ballSpacing * 2,
+      y: centerY + ballSpacing
     });
 
     return positions;
-  }
-
-  private validateBallBoundaries() {
-    // Check if any ball has escaped the boundaries and reposition if necessary
-    const safeLeft = this.scale.width * 0.18;
-    const safeRight = this.scale.width * 0.82;
-    const safeTop = this.scale.height * 0.22;
-    const safeBottom = this.scale.height * 0.78;
-    const ballRadius = 20;
-
-    this.balls.forEach(ball => {
-      if (ball && ball.active) {
-        let x = ball.x;
-        let y = ball.y;
-        let needsReposition = false;
-
-        // Check boundaries and correct position
-        if (x < safeLeft + ballRadius) {
-          x = safeLeft + ballRadius;
-          needsReposition = true;
-        } else if (x > safeRight - ballRadius) {
-          x = safeRight - ballRadius;
-          needsReposition = true;
-        }
-
-        if (y < safeTop + ballRadius) {
-          y = safeTop + ballRadius;
-          needsReposition = true;
-        } else if (y > safeBottom - ballRadius) {
-          y = safeBottom - ballRadius;
-          needsReposition = true;
-        }
-
-        if (needsReposition) {
-          console.log(`Repositioning ball to keep within boundaries:`, { x, y });
-          ball.setPosition(x, y);
-          ball.setVelocity(0, 0); // Stop the ball
-        }
-      }
-    });
   }
 
   private setupInput() {
@@ -943,60 +723,37 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private setupEventListeners() {
-    console.log('Setting up collision event listeners...');
-    
-    // Collision events for all types of collisions
-    this.matter.world.on('collisionstart', (event: any) => {
-      console.log('General collisionstart event fired:', event.pairs.length);
-      this.handleCollisionStart(event);
-    }, this);
-    
-    this.matter.world.on('collisionactive', (event: any) => {
-      console.log('General collisionactive event fired:', event.pairs.length);
-      this.handleCollisionActive(event);
-    }, this);
-    
-    this.matter.world.on('collisionend', (event: any) => {
-      console.log('General collisionend event fired:', event.pairs.length);
-      this.handleCollisionEnd(event);
-    }, this);
+    // Collision events
+    this.matter.world.on('collisionstart', this.handleCollisionStart, this);
+    this.matter.world.on('collisionactive', this.handleCollisionActive, this);
+    this.matter.world.on('collisionend', this.handleCollisionEnd, this);
 
-    // Specific ball vs pocket collisions - separate handler with detailed logging
+    // Ball vs pocket collisions
     this.matter.world.on('collisionstart', (event: any) => {
-      console.log('Ball-Pocket collision event fired!', event.pairs.length);
       this.handleBallPocketCollisions(event);
     });
   }
 
   private handlePointerDown(pointer: Phaser.Input.Pointer) {
-    console.log('handlePointerDown called', {
-      cueBall: !!this.cueBall,
-      isAiming: this.isAiming,
-      gameOverText: !!this.gameOverText
-    });
+    if (!this.cueBall || this.isAiming || this.gameOverText) return;
 
-    if (!this.cueBall || this.isAiming || this.gameOverText) {
-      console.log('Cannot aim: missing cue ball or already aiming or game over');
+    // Check if clicking near cue ball (only on current player's turn)
+    const currentPlayer = this.gameData.players[this.currentPlayerTurn];
+    if (currentPlayer.userId !== this.gameData.currentUserId) {
+      console.log('Not your turn!');
       return;
     }
 
-    // Check if clicking near cue ball (temporarily allow all shots for testing)
     const distance = Phaser.Math.Distance.Between(
       pointer.worldX, pointer.worldY,
       this.cueBall.x, this.cueBall.y
     );
 
-    console.log('Distance to cue ball:', distance);
-
-    // Temporarily increase click radius for easier testing
-    if (distance < 200) { // Increased from 150 to 200
-      console.log('Starting aim mode');
+    if (distance < 150) { // Within reasonable distance to cue ball
       this.isAiming = true;
       this.shotPower = 0;
       this.createCue(pointer);
       this.createPowerIndicator(pointer);
-    } else {
-      console.log('Click too far from cue ball');
     }
   }
 
@@ -1035,11 +792,6 @@ class PoolGameScene extends Phaser.Scene {
     if (this.powerIndicator) {
       this.powerIndicator.destroy();
       this.powerIndicator = null;
-    }
-
-    if (this.powerText) {
-      this.powerText.destroy();
-      this.powerText = null;
     }
 
     // Apply force to cue ball
@@ -1190,45 +942,29 @@ class PoolGameScene extends Phaser.Scene {
 
     // Update power percentage text
     const powerPercentage = Math.round((this.shotPower / this.maxPower) * 100);
-    if (this.powerText) {
-      this.powerText.setText(`Power: ${powerPercentage}%`);
-      this.powerText.setPosition(this.cueBall.x, this.cueBall.y - 50);
+    const powerText = this.children.getByData('type', 'powerText') as Phaser.GameObjects.Text;
+    if (powerText) {
+      powerText.setText(`Power: ${powerPercentage}%`);
+      powerText.setPosition(this.cueBall.x, this.cueBall.y - 50);
     }
   }
 
   private shootCueBall(pointer: Phaser.Input.Pointer) {
     if (!this.cueBall) return;
 
-    console.log('shootCueBall called', {
-      shotPower: this.shotPower,
-      pointerX: pointer.worldX,
-      pointerY: pointer.worldY,
-      cueBallX: this.cueBall.x,
-      cueBallY: this.cueBall.y
-    });
-
-    // Calculate direction vector from cue ball to pointer
+    // Calculate direction vector
     const angle = Phaser.Math.Angle.Between(
       this.cueBall.x, this.cueBall.y,
       pointer.worldX, pointer.worldY
     );
 
-    console.log('Shot angle:', angle, 'degrees:', Phaser.Math.RadToDeg(angle));
-
-    // Apply force based on power - increased multiplier for better movement
-    const force = this.shotPower * 0.1; // Increased from 0.03 to 0.1
+    // Apply force based on power
+    const force = this.shotPower * 0.03;
     const forceX = Math.cos(angle) * force;
     const forceY = Math.sin(angle) * force;
 
-    console.log('Applying force:', { forceX, forceY, force });
-
-    // Apply velocity directly to cue ball
+    // Apply impulse to cue ball
     this.cueBall.setVelocity(forceX, forceY);
-    
-    // Add spin for more realistic physics
-    this.cueBall.setAngularVelocity(forceX * 0.01);
-
-    console.log('Cue ball velocity set to:', this.cueBall.body?.velocity);
 
     // Play sound effect (if available)
     if (this.sound) {
@@ -1252,51 +988,17 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private handleBallPocketCollisions(event: any) {
-    console.log('Collision event triggered!', {
-      pairs: event.pairs.length,
-      event: event
-    });
-
-    event.pairs.forEach((pair: any, index: number) => {
+    event.pairs.forEach((pair: any) => {
       const { bodyA, bodyB } = pair;
-      
-      console.log(`Collision pair ${index}:`, {
-        bodyA: {
-          label: bodyA.label,
-          gameObject: !!bodyA.gameObject,
-          position: bodyA.position,
-          isSensor: bodyA.isSensor
-        },
-        bodyB: {
-          label: bodyB.label,
-          gameObject: !!bodyB.gameObject,
-          position: bodyB.position,
-          isSensor: bodyB.isSensor
-        }
-      });
 
       // Check if ball entered pocket
       if (bodyA.label && bodyA.label.startsWith('pocket-')) {
         const ball = bodyB.gameObject;
-        console.log('Ball pocketed via bodyA:', {
-          ball: !!ball,
-          ballType: ball?.getData('type'),
-          ballNumber: ball?.getData('number'),
-          isCueBall: ball === this.cueBall,
-          isActive: ball?.active
-        });
         if (ball && ball !== this.cueBall && ball.active) {
           this.handleBallPocketed(ball);
         }
       } else if (bodyB.label && bodyB.label.startsWith('pocket-')) {
         const ball = bodyA.gameObject;
-        console.log('Ball pocketed via bodyB:', {
-          ball: !!ball,
-          ballType: ball?.getData('type'),
-          ballNumber: ball?.getData('number'),
-          isCueBall: ball === this.cueBall,
-          isActive: ball?.active
-        });
         if (ball && ball !== this.cueBall && ball.active) {
           this.handleBallPocketed(ball);
         }
@@ -1322,269 +1024,10 @@ class PoolGameScene extends Phaser.Scene {
       return;
     }
 
-    // Handle solid/stripe balls with sliding animation
+    // Handle solid/stripe balls
     if (ballType === 'solid' || ballType === 'stripe') {
-      this.animateBallPocket(ball);
       this.handleGroupBallPocketed(ball);
     }
-  }
-
-  private animateBallPocket(ball: Phaser.Physics.Matter.Sprite) {
-    // Find the closest pocket to the ball
-    const closestPocket = this.findClosestPocket(ball.x, ball.y);
-
-    if (!closestPocket) return;
-
-    // Create realistic sliding animation with physics
-    const pocketX = closestPocket.x;
-    const pocketY = closestPocket.y;
-    const ballRadius = 20;
-
-    console.log(`Animating ball slide to pocket at:`, { pocketX, pocketY });
-
-    // Calculate direction and distance to pocket
-    const distanceToPocket = Phaser.Math.Distance.Between(ball.x, ball.y, pocketX, pocketY);
-    const angleToPocket = Phaser.Math.Angle.Between(ball.x, ball.y, pocketX, pocketY);
-
-    // Add rolling/spinning effect during slide
-    const spinSpeed = 0.3; // Radians per frame
-    const rollDirection = angleToPocket + Math.PI/2; // Perpendicular to movement direction
-
-    // Create particle trail effect
-    this.createBallTrail(ball, pocketX, pocketY);
-
-    // Use physics-based sliding with realistic deceleration
-    const slideForce = 0.15; // Initial force toward pocket
-    const friction = 0.98; // Friction coefficient for realistic deceleration
-
-    // Apply initial force toward pocket with more realistic physics
-    const initialVelocity = slideForce * Math.sqrt(distanceToPocket) * 0.02;
-    ball.setVelocity(
-      Math.cos(angleToPocket) * initialVelocity,
-      Math.sin(angleToPocket) * initialVelocity
-    );
-
-    // Add angular velocity for rolling effect with realistic spin
-    const initialSpin = spinSpeed * (Math.random() > 0.5 ? 1 : -1) * (1 + Math.random() * 0.5);
-    ball.setAngularVelocity(initialSpin);
-
-    // Animate with physics and visual effects
-    let slideProgress = 0;
-    const totalSlideTime = 1200; // milliseconds
-    const startTime = Date.now();
-
-    const slideUpdate = () => {
-      const elapsed = Date.now() - startTime;
-      slideProgress = Math.min(elapsed / totalSlideTime, 1);
-
-      // Apply friction for realistic deceleration
-      const currentVelocity = ball.body?.velocity;
-      if (currentVelocity) {
-        ball.setVelocity(
-          currentVelocity.x * friction,
-          currentVelocity.y * friction
-        );
-      }
-
-      // Add slight random movement for realism (only if body exists)
-      if (Math.random() < 0.3 && ball.body?.velocity) {
-        const currentVel = ball.body.velocity;
-        ball.setVelocity(
-          currentVel.x + (Math.random() - 0.5) * 0.02,
-          currentVel.y + (Math.random() - 0.5) * 0.02
-        );
-      }
-
-      // Gradually reduce angular velocity for realistic spin decay
-      const body = ball.body as any;
-      if (body?.angularVelocity !== undefined) {
-        ball.setAngularVelocity(body.angularVelocity * 0.98);
-      }
-
-      // Check if ball is close enough to pocket or has stopped moving
-      const currentDistance = Phaser.Math.Distance.Between(ball.x, ball.y, pocketX, pocketY);
-      const ballSpeed = body?.speed || 0;
-
-      if (currentDistance < ballRadius * 1.5 || slideProgress >= 1 || ballSpeed < 0.01) {
-        // Ball reached pocket, slide off table
-        this.slideBallOffTable(ball, pocketX, pocketY);
-        this.events.off('update', slideUpdate);
-      }
-    };
-
-    // Start the physics-based slide animation
-    this.events.on('update', slideUpdate);
-
-    // Add sound effect for ball sliding
-    this.playBallSlideSound();
-  }
-
-  private findClosestPocket(ballX: number, ballY: number): { x: number, y: number } | null {
-    const pocketPositions = [
-      { x: this.scale.width * 0.18, y: this.scale.height * 0.22 }, // Top left
-      { x: this.scale.width * 0.5, y: this.scale.height * 0.22 - 10 }, // Top center
-      { x: this.scale.width * 0.82, y: this.scale.height * 0.22 }, // Top right
-      { x: this.scale.width * 0.18, y: this.scale.height * 0.78 }, // Bottom left
-      { x: this.scale.width * 0.5, y: this.scale.height * 0.78 + 10 }, // Bottom center
-      { x: this.scale.width * 0.82, y: this.scale.height * 0.78 }  // Bottom right
-    ];
-
-    let closestPocket = null;
-    let minDistance = Infinity;
-
-    pocketPositions.forEach(pocket => {
-      const distance = Phaser.Math.Distance.Between(ballX, ballY, pocket.x, pocket.y);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestPocket = pocket;
-      }
-    });
-
-    return closestPocket;
-  }
-
-  private createBallTrail(ball: Phaser.Physics.Matter.Sprite, targetX: number, targetY: number) {
-    // Create enhanced particle trail effect with realistic physics
-    const trailParticles: any[] = [];
-    const trailLength = 10;
-
-    for (let i = 0; i < trailLength; i++) {
-      const particle = this.add.circle(ball.x, ball.y, 6 - i * 0.3, 0xFFFFFF, 0.8 - i * 0.06);
-      particle.setDepth(-2);
-      
-      // Add glow effect to each particle
-      const glowParticle = this.add.circle(ball.x, ball.y, (6 - i * 0.3) + 2, 0xFFFFFF, 0.2 - i * 0.02);
-      glowParticle.setDepth(-3);
-      
-      trailParticles.push(particle);
-
-      // Enhanced fade out with bounce effect
-      this.tweens.add({
-        targets: [particle, glowParticle],
-        alpha: 0,
-        scale: 0.1,
-        duration: 400 + i * 30,
-        ease: 'Sine.easeOut',
-        onComplete: () => {
-          particle.destroy();
-          glowParticle.destroy();
-        }
-      });
-    }
-
-    // Update trail positions with realistic trailing effect
-    let trailIndex = 0;
-    const trailUpdate = () => {
-      if (trailIndex < trailLength && ball.active) {
-        const particle = trailParticles[trailIndex];
-        if (particle) {
-          // Add some randomness to trail position for realism
-          const jitterX = (Math.random() - 0.5) * 8;
-          const jitterY = (Math.random() - 0.5) * 8;
-          particle.setPosition(ball.x + jitterX, ball.y + jitterY);
-        }
-        trailIndex++;
-      } else {
-        this.events.off('update', trailUpdate);
-      }
-    };
-
-    // Update trail every frame with slight delay for natural trailing
-    const trailInterval = setInterval(() => {
-      if (!ball.active) {
-        clearInterval(trailInterval);
-        return;
-      }
-      trailUpdate();
-    }, 16); // ~60fps
-
-    // Clean up interval after animation completes
-    setTimeout(() => {
-      clearInterval(trailInterval);
-    }, 1500);
-  }
-
-  private playBallSlideSound() {
-    // Add sound effect for ball sliding (placeholder for actual sound implementation)
-    console.log('Playing ball slide sound effect');
-
-    // In a real implementation, you would play an audio file:
-    // if (this.sound && this.sound.get('ballSlide')) {
-    //   this.sound.play('ballSlide', { volume: 0.3 });
-    // }
-  }
-
-  private playPottingSound() {
-    // Add sound effect for successful ball potting
-    console.log('Playing potting sound effect');
-
-    // In a real implementation, you would play an audio file:
-    // if (this.sound && this.sound.get('ballPocketed')) {
-    //   this.sound.play('ballPocketed', { volume: 0.4 });
-    // }
-  }
-
-  private slideBallOffTable(ball: Phaser.Physics.Matter.Sprite, pocketX: number, pocketY: number) {
-    // Determine direction to slide off table based on pocket position
-    let targetX = pocketX;
-    let targetY = pocketY;
-
-    // Slide direction based on pocket location
-    if (pocketY < this.scale.height * 0.4) {
-      // Top pocket - slide off top
-      targetY = -50; // Slide above table
-      targetX = pocketX + (Math.random() - 0.5) * 100; // Random horizontal offset
-    } else if (pocketY > this.scale.height * 0.6) {
-      // Bottom pocket - slide off bottom
-      targetY = this.scale.height + 50; // Slide below table
-      targetX = pocketX + (Math.random() - 0.5) * 100; // Random horizontal offset
-    } else if (pocketX < this.scale.width * 0.4) {
-      // Left pocket - slide off left
-      targetX = -50; // Slide left of table
-      targetY = pocketY + (Math.random() - 0.5) * 100; // Random vertical offset
-    } else {
-      // Right pocket - slide off right
-      targetX = this.scale.width + 50; // Slide right of table
-      targetY = pocketY + (Math.random() - 0.5) * 100; // Random vertical offset
-    }
-
-    console.log(`Sliding ball off table to:`, { targetX, targetY });
-
-    // Add final glow effect before disappearing
-    const glowEffect = this.add.circle(ball.x, ball.y, 25, 0xFFFFFF, 0.3);
-    glowEffect.setDepth(-1);
-
-    // Slide ball off table with enhanced fade out and effects
-    this.tweens.add({
-      targets: ball,
-      x: targetX,
-      y: targetY,
-      alpha: 0,
-      scale: 0.3,
-      duration: 1200,
-      ease: 'Power2',
-      onUpdate: (tween, target) => {
-        // Update glow position and fade it out
-        glowEffect.setPosition(target.x, target.y);
-        glowEffect.setAlpha(target.alpha * 0.5);
-
-        // Add subtle bounce effect as ball falls off table
-        const progress = tween.progress;
-        if (progress > 0.3) {
-          const bounceOffset = Math.sin(progress * Math.PI * 4) * 2;
-          target.y += bounceOffset;
-        }
-      },
-      onComplete: () => {
-        // Remove ball and glow from game
-        ball.destroy();
-        glowEffect.destroy();
-        console.log('Ball removed from table after enhanced sliding animation');
-
-        // Play potting sound effect
-        this.playPottingSound();
-      }
-    });
   }
 
   private handleEightBallPocketed(ball: Phaser.Physics.Matter.Sprite) {
@@ -1775,12 +1218,6 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   update() {
-    // Continuously validate ball boundaries to prevent balls from escaping
-    this.validateBallBoundaries();
-
-    // AGGRESSIVE POCKET DETECTION - Check if balls are close to pockets
-    this.checkDistanceBasedPocketDetection();
-
     // Update game logic each frame
     if (this.cueBall && (this.cueBall.body as any).speed < 0.1 && !this.isAiming) {
       // All balls have stopped, check if we should switch turns
@@ -1805,38 +1242,6 @@ class PoolGameScene extends Phaser.Scene {
       const pulse = Math.sin(Date.now() * 0.005) * 10 + 10;
       this.powerIndicator.setSize(this.powerIndicator.width, pulse);
     }
-  }
-
-  private checkDistanceBasedPocketDetection() {
-    // Fallback distance-based pocket detection
-    const pocketPositions = [
-      { x: this.scale.width * 0.18, y: this.scale.height * 0.22 },
-      { x: this.scale.width * 0.5, y: this.scale.height * 0.22 - 10 },
-      { x: this.scale.width * 0.82, y: this.scale.height * 0.22 },
-      { x: this.scale.width * 0.18, y: this.scale.height * 0.78 },
-      { x: this.scale.width * 0.5, y: this.scale.height * 0.78 + 10 },
-      { x: this.scale.width * 0.82, y: this.scale.height * 0.78 }
-    ];
-
-    this.balls.forEach(ball => {
-      if (!ball || !ball.active || ball.getData('type') === 'cue') return;
-
-      const ballType = ball.getData('type');
-      const ballNumber = ball.getData('number');
-
-      // Check distance to each pocket
-      for (let i = 0; i < pocketPositions.length; i++) {
-        const pocket = pocketPositions[i];
-        const distance = Phaser.Math.Distance.Between(ball.x, ball.y, pocket.x, pocket.y);
-        
-        // If ball is very close to pocket (within 30 pixels), trigger potting
-        if (distance < 30) {
-          console.log(`🎱 AGGRESSIVE POCKET DETECTION: Ball ${ballNumber} (${ballType}) detected near pocket ${i}! Distance: ${distance.toFixed(2)}`);
-          this.handleBallPocketed(ball);
-          break;
-        }
-      }
-    });
   }
 }
 

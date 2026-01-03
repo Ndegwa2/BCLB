@@ -39,9 +39,6 @@ const GamePlay: React.FC = () => {
     case 'pool_8ball':
       return <PoolGame />;
 
-    case 'poker_texas_holdem':
-      return <PokerGame />;
-
     case 'card_blackjack':
       return (
         <div className="min-h-screen bg-gray-50">

@@ -7,7 +7,6 @@ const gameTypes = [
   { value: 'draw_1v1', label: '🎯 Draw 1v1', color: 'bg-blue-500' },
   { value: 'pool_8ball', label: '🎱 Pool 8ball', color: 'bg-yellow-500' },
   { value: 'card_blackjack', label: '🃏 Blackjack', color: 'bg-purple-500' },
-  { value: 'poker_texas_holdem', label: '♠️ Poker Texas Hold\'em', color: 'bg-red-500' },
 ]
 
 const aiDifficulties = [

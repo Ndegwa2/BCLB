@@ -24,7 +24,7 @@ export const GameList: React.FC = () => {
   const [filteredGames, setFilteredGames] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'draw_1v1' | 'pool_8ball' | 'card_blackjack' | 'poker_texas_holdem'>('all')
+  const [filter, setFilter] = useState<'all' | 'draw_1v1' | 'pool_8ball' | 'card_blackjack'>('all')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [joiningGameId, setJoiningGameId] = useState<number | null>(null)
@@ -126,8 +126,7 @@ export const GameList: React.FC = () => {
     { value: 'all', label: 'All Games' },
     { value: 'draw_1v1', label: 'Draw 1v1' },
     { value: 'pool_8ball', label: 'Pool 8ball' },
-    { value: 'card_blackjack', label: 'Blackjack' },
-    { value: 'poker_texas_holdem', label: 'Texas Hold\'em' }
+    { value: 'card_blackjack', label: 'Blackjack' }
   ]
 
   return (

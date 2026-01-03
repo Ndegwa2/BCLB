@@ -51,7 +51,7 @@ export interface PoolGameState {
     solids: number;
     stripes: number;
   };
-  gameType: 'pool_8ball' | 'draw_1v1' | 'card_blackjack' | 'poker_texas_holdem' | 'tournament_single_elimination';
+  gameType: 'pool_8ball' | 'draw_1v1' | 'card_blackjack' | 'tournament_single_elimination';
 }
 
 export interface DrawGameState {

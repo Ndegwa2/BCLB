@@ -11,6 +11,8 @@ class User(db.Model):
     phone_number = db.Column(db.String(15), nullable=False)
     password = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
+    is_ai = db.Column(db.Boolean, default=False)
+    ai_difficulty = db.Column(db.String(20), default='medium')  # 'easy', 'medium', 'hard'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -33,6 +35,8 @@ class User(db.Model):
             'email': self.email,
             'phone_number': self.phone_number,
             'is_admin': self.is_admin,
+            'is_ai': self.is_ai,
+            'ai_difficulty': self.ai_difficulty,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

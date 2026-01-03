@@ -126,8 +126,7 @@ export const GameList: React.FC = () => {
     { value: 'all', label: 'All Games' },
     { value: 'draw_1v1', label: 'Draw 1v1' },
     { value: 'pool_8ball', label: 'Pool 8ball' },
-    { value: 'card_blackjack', label: 'Blackjack' },
-    { value: 'poker_texas_holdem', label: 'Texas Hold\'em' }
+    { value: 'card_blackjack', label: 'Blackjack' }
   ]
 
   return (

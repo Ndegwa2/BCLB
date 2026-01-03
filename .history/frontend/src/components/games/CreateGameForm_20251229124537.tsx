@@ -1,13 +1,12 @@
 import React, { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWallet } from '../../contexts/WalletContext'
-import { apiClient } from '../../services/api'
+import { api } from '../../services/api'
 
 const gameTypes = [
   { value: 'draw_1v1', label: '🎯 Draw 1v1', color: 'bg-blue-500' },
   { value: 'pool_8ball', label: '🎱 Pool 8ball', color: 'bg-yellow-500' },
   { value: 'card_blackjack', label: '🃏 Blackjack', color: 'bg-purple-500' },
-  { value: 'poker_texas_holdem', label: '♠️ Poker Texas Hold\'em', color: 'bg-red-500' },
 ]
 
 const aiDifficulties = [
@@ -53,27 +52,14 @@ export const CreateGameForm: React.FC = () => {
 
       setIsLoading(true)
       try {
-        const gameData = {
-          game_type: selectedGameType,
-          stake_amount: parseFloat(stakeAmount),
-          is_free: isFree,
-          allow_ai: allowAI,
-          ai_difficulty: allowAI ? aiDifficulty : undefined
-        }
-
-        const response = await apiClient.post('/games', gameData)
-        const game = response.data.game
-        
-        setSuccess(`Game created successfully! Game code: ${game.game_code}`)
-        
+        // TODO: Implement actual game creation API call
+        // This would call the backend /api/games endpoint
+        // For now, simulate success
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        setSuccess(`Game created successfully! Game code: ${Math.random().toString(36).substring(2, 8).toUpperCase()}`)
         // Reset form
         setStakeAmount('100')
         setIsFree(false)
-        setAllowAI(false)
-        setAiDifficulty('medium')
-      } catch (error: any) {
-        console.error('Error creating game:', error)
-        setError(error.response?.data?.error || 'Failed to create game')
       } finally {
         setIsLoading(false)
       }
@@ -152,46 +138,6 @@ export const CreateGameForm: React.FC = () => {
             Create as free game (no stake required)
           </label>
         </div>
-
-        {/* AI Opponent Toggle */}
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            id="ai-opponent"
-            checked={allowAI}
-            onChange={(e) => setAllowAI(e.target.checked)}
-            className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-          />
-          <label htmlFor="ai-opponent" className="ml-2 block text-sm text-gray-700">
-            🤖 Play against AI opponent
-          </label>
-        </div>
-
-        {/* AI Difficulty Selection */}
-        {allowAI && (
-          <div className="ml-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              AI Difficulty Level
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {aiDifficulties.map((difficulty) => (
-                <button
-                  key={difficulty.value}
-                  type="button"
-                  onClick={() => setAiDifficulty(difficulty.value)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    aiDifficulty === difficulty.value
-                      ? 'bg-purple-500 text-white'
-                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-purple-50'
-                  }`}
-                >
-                  <div className="font-medium">{difficulty.label}</div>
-                  <div className="text-xs opacity-75">{difficulty.description}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Current Balance */}
         <div className="text-sm text-gray-600">

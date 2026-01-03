@@ -238,81 +238,19 @@ const PoolGame: React.FC = () => {
           <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white p-3 rounded-lg z-10">
             <p className="font-bold">🎯 Your Turn</p>
             <p className="text-sm">Click near the white ball to aim</p>
-            <div className="flex flex-col gap-2 mt-2">
-              <button
-                onClick={() => {
-                  // Test shot button for debugging
-                  const scene = phaserGameRef.current?.scene.scenes[0] as any;
-                  if (scene && scene.cueBall) {
-                    scene.cueBall.setVelocity(5, 0); // Simple test shot
-                    console.log('Test shot fired!');
-                  }
-                }}
-                className="px-2 py-1 bg-blue-600 text-white text-xs rounded"
-              >
-                Test Shot
-              </button>
-              <button
-                onClick={() => {
-                  // Manual pocket test button
-                  const scene = phaserGameRef.current?.scene.scenes[0] as any;
-                  if (scene) {
-                    console.log('=== MANUAL POCKET TEST ===');
-                    console.log('Balls:', scene.balls?.length || 0);
-                    console.log('Pockets:', scene.pockets?.length || 0);
-                    
-                    // Test if balls can be manually pocketed
-                    const testBall = scene.balls?.find((ball: any) =>
-                      ball.getData('type') !== 'cue' && ball.active
-                    );
-                    
-                    if (testBall) {
-                      console.log('Manually pocketing ball:', testBall.getData('number'));
-                      testBall.setVelocity(0, 0);
-                      testBall.setPosition(scene.scale.width * 0.5, scene.scale.height * 0.5);
-                      scene.handleBallPocketed(testBall);
-                    } else {
-                      console.log('No active balls found to test!');
-                    }
-                  }
-                }}
-                className="px-2 py-1 bg-red-600 text-white text-xs rounded"
-              >
-                Manual Pocket Test
-              </button>
-              <button
-                onClick={() => {
-                  // Aggressive pocket positioning test
-                  const scene = phaserGameRef.current?.scene.scenes[0] as any;
-                  if (scene) {
-                    console.log('=== AGGRESSIVE POCKET POSITION TEST ===');
-                    
-                    // Get the first non-cue ball and move it near a pocket
-                    const testBall = scene.balls?.find((ball: any) =>
-                      ball.getData('type') !== 'cue' && ball.active
-                    );
-                    
-                    if (testBall) {
-                      console.log('Moving ball near pocket for distance detection...');
-                      // Position ball very close to top-left pocket
-                      const pocketX = scene.scale.width * 0.18;
-                      const pocketY = scene.scale.height * 0.22;
-                      
-                      testBall.setVelocity(0, 0);
-                      testBall.setPosition(pocketX + 25, pocketY + 25);
-                      
-                      console.log(`Ball positioned at: (${pocketX + 25}, ${pocketY + 25})`);
-                      console.log('This should trigger aggressive pocket detection within 30 pixels!');
-                    } else {
-                      console.log('No active balls found to test!');
-                    }
-                  }
-                }}
-                className="px-2 py-1 bg-purple-600 text-white text-xs rounded"
-              >
-                Aggressive Pocket Test
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                // Test shot button for debugging
+                const scene = phaserGameRef.current?.scene.scenes[0] as any;
+                if (scene && scene.cueBall) {
+                  scene.cueBall.setVelocity(5, 0); // Simple test shot
+                  console.log('Test shot fired!');
+                }
+              }}
+              className="mt-2 px-2 py-1 bg-blue-600 text-white text-xs rounded"
+            >
+              Test Shot
+            </button>
           </div>
         )}
 
@@ -632,7 +570,7 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private createPockets() {
-    const pocketSize = 60; // Increased pocket size for better detection
+    const pocketSize = 50; // Larger pockets for better potting
     const pocketColor = 0x000000;
 
     // Define safe boundaries (same as ball boundaries)
@@ -658,7 +596,7 @@ class PoolGameScene extends Phaser.Scene {
       (this.pockets as any).push(pocket);
 
       // Add physics sensor for ball detection - larger detection area
-      const pocketSensor = this.matter.add.circle(pos.x, pos.y, pocketSize * 0.8, {
+      this.matter.add.circle(pos.x, pos.y, pocketSize * 0.9, {
         isSensor: true,
         label: `pocket-${index}`,
         collisionFilter: {
@@ -667,22 +605,7 @@ class PoolGameScene extends Phaser.Scene {
         }
       });
 
-      // Add debug visual for sensor area (temporary)
-      const debugSensor = this.add.circle(pos.x, pos.y, pocketSize * 0.8, 0xFF0000, 0.2);
-      debugSensor.setDepth(-2);
-      
-      // Remove debug visual after 3 seconds
-      setTimeout(() => {
-        debugSensor.destroy();
-      }, 3000);
-
-      console.log(`Pocket ${index} created at:`, {
-        x: pos.x,
-        y: pos.y,
-        sensorRadius: pocketSize * 0.8,
-        ballCategory: '0x0001',
-        pocketCategory: '0x0002'
-      });
+      console.log(`Pocket ${index} created at:`, { x: pos.x, y: pos.y });
     });
 
     console.log('Pockets created inside table boundaries for realistic potting');
@@ -738,11 +661,9 @@ class PoolGameScene extends Phaser.Scene {
     cueBall.setMass(1);
     cueBall.setBounce(0.9);
     cueBall.setCollisionCategory(0x0001);
-    cueBall.setCollidesWith(0x0001 | 0x0002); // Collide with balls and pockets
+    cueBall.setCollidesWith(0x0001);
     cueBall.setData('type', 'cue');
     cueBall.setData('number', 0);
-    
-    console.log('Cue ball created with collision category 0x0001, collides with 0x0001 | 0x0002');
     
     // Make sure the cue ball is interactive
     cueBall.setInteractive({ useHandCursor: true });
@@ -803,11 +724,9 @@ class PoolGameScene extends Phaser.Scene {
       (ball.body as any).restitution = 0.8;
       ball.setMass(1);
       ball.setCollisionCategory(0x0001);
-      ball.setCollidesWith(0x0001 | 0x0002); // Collide with balls (0x0001) and pockets (0x0002)
+      ball.setCollidesWith(0x0001);
       ball.setData('type', ballConfig.type);
       ball.setData('number', ballConfig.number);
-
-      console.log(`Ball ${ballConfig.number} (${ballConfig.type}) created with collision category 0x0001`);
 
       this.balls.push(ball);
     });
@@ -943,27 +862,13 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private setupEventListeners() {
-    console.log('Setting up collision event listeners...');
-    
-    // Collision events for all types of collisions
-    this.matter.world.on('collisionstart', (event: any) => {
-      console.log('General collisionstart event fired:', event.pairs.length);
-      this.handleCollisionStart(event);
-    }, this);
-    
-    this.matter.world.on('collisionactive', (event: any) => {
-      console.log('General collisionactive event fired:', event.pairs.length);
-      this.handleCollisionActive(event);
-    }, this);
-    
-    this.matter.world.on('collisionend', (event: any) => {
-      console.log('General collisionend event fired:', event.pairs.length);
-      this.handleCollisionEnd(event);
-    }, this);
+    // Collision events
+    this.matter.world.on('collisionstart', this.handleCollisionStart, this);
+    this.matter.world.on('collisionactive', this.handleCollisionActive, this);
+    this.matter.world.on('collisionend', this.handleCollisionEnd, this);
 
-    // Specific ball vs pocket collisions - separate handler with detailed logging
+    // Ball vs pocket collisions
     this.matter.world.on('collisionstart', (event: any) => {
-      console.log('Ball-Pocket collision event fired!', event.pairs.length);
       this.handleBallPocketCollisions(event);
     });
   }
@@ -1252,51 +1157,17 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private handleBallPocketCollisions(event: any) {
-    console.log('Collision event triggered!', {
-      pairs: event.pairs.length,
-      event: event
-    });
-
-    event.pairs.forEach((pair: any, index: number) => {
+    event.pairs.forEach((pair: any) => {
       const { bodyA, bodyB } = pair;
-      
-      console.log(`Collision pair ${index}:`, {
-        bodyA: {
-          label: bodyA.label,
-          gameObject: !!bodyA.gameObject,
-          position: bodyA.position,
-          isSensor: bodyA.isSensor
-        },
-        bodyB: {
-          label: bodyB.label,
-          gameObject: !!bodyB.gameObject,
-          position: bodyB.position,
-          isSensor: bodyB.isSensor
-        }
-      });
 
       // Check if ball entered pocket
       if (bodyA.label && bodyA.label.startsWith('pocket-')) {
         const ball = bodyB.gameObject;
-        console.log('Ball pocketed via bodyA:', {
-          ball: !!ball,
-          ballType: ball?.getData('type'),
-          ballNumber: ball?.getData('number'),
-          isCueBall: ball === this.cueBall,
-          isActive: ball?.active
-        });
         if (ball && ball !== this.cueBall && ball.active) {
           this.handleBallPocketed(ball);
         }
       } else if (bodyB.label && bodyB.label.startsWith('pocket-')) {
         const ball = bodyA.gameObject;
-        console.log('Ball pocketed via bodyB:', {
-          ball: !!ball,
-          ballType: ball?.getData('type'),
-          ballNumber: ball?.getData('number'),
-          isCueBall: ball === this.cueBall,
-          isActive: ball?.active
-        });
         if (ball && ball !== this.cueBall && ball.active) {
           this.handleBallPocketed(ball);
         }
@@ -1396,14 +1267,13 @@ class PoolGameScene extends Phaser.Scene {
       }
 
       // Gradually reduce angular velocity for realistic spin decay
-      const body = ball.body as any;
-      if (body?.angularVelocity !== undefined) {
-        ball.setAngularVelocity(body.angularVelocity * 0.98);
+      if (ball.body?.angularVelocity) {
+        ball.setAngularVelocity(ball.body.angularVelocity * 0.98);
       }
 
       // Check if ball is close enough to pocket or has stopped moving
       const currentDistance = Phaser.Math.Distance.Between(ball.x, ball.y, pocketX, pocketY);
-      const ballSpeed = body?.speed || 0;
+      const ballSpeed = ball.body?.speed || 0;
 
       if (currentDistance < ballRadius * 1.5 || slideProgress >= 1 || ballSpeed < 0.01) {
         // Ball reached pocket, slide off table
@@ -1444,44 +1314,36 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private createBallTrail(ball: Phaser.Physics.Matter.Sprite, targetX: number, targetY: number) {
-    // Create enhanced particle trail effect with realistic physics
-    const trailParticles: any[] = [];
-    const trailLength = 10;
+    // Create particle trail effect behind the sliding ball
+    const trailParticles: Phaser.GameObjects.Rectangle[] = [];
+    const trailLength = 8;
+    const trailSpacing = 3;
 
     for (let i = 0; i < trailLength; i++) {
-      const particle = this.add.circle(ball.x, ball.y, 6 - i * 0.3, 0xFFFFFF, 0.8 - i * 0.06);
-      particle.setDepth(-2);
-      
-      // Add glow effect to each particle
-      const glowParticle = this.add.circle(ball.x, ball.y, (6 - i * 0.3) + 2, 0xFFFFFF, 0.2 - i * 0.02);
-      glowParticle.setDepth(-3);
-      
-      trailParticles.push(particle);
+      const trailParticle = this.add.rectangle(ball.x, ball.y, 4, 4, 0xFFFFFF, 0.6);
+      trailParticle.setDepth(-2);
+      trailParticles.push(trailParticle);
 
-      // Enhanced fade out with bounce effect
+      // Fade out trail particles over time
       this.tweens.add({
-        targets: [particle, glowParticle],
+        targets: trailParticle,
         alpha: 0,
         scale: 0.1,
-        duration: 400 + i * 30,
-        ease: 'Sine.easeOut',
+        duration: 300 + i * 50,
+        ease: 'Power2',
         onComplete: () => {
-          particle.destroy();
-          glowParticle.destroy();
+          trailParticle.destroy();
         }
       });
     }
 
-    // Update trail positions with realistic trailing effect
+    // Update trail positions during slide
     let trailIndex = 0;
     const trailUpdate = () => {
-      if (trailIndex < trailLength && ball.active) {
+      if (trailIndex < trailLength) {
         const particle = trailParticles[trailIndex];
         if (particle) {
-          // Add some randomness to trail position for realism
-          const jitterX = (Math.random() - 0.5) * 8;
-          const jitterY = (Math.random() - 0.5) * 8;
-          particle.setPosition(ball.x + jitterX, ball.y + jitterY);
+          particle.setPosition(ball.x, ball.y);
         }
         trailIndex++;
       } else {
@@ -1489,19 +1351,7 @@ class PoolGameScene extends Phaser.Scene {
       }
     };
 
-    // Update trail every frame with slight delay for natural trailing
-    const trailInterval = setInterval(() => {
-      if (!ball.active) {
-        clearInterval(trailInterval);
-        return;
-      }
-      trailUpdate();
-    }, 16); // ~60fps
-
-    // Clean up interval after animation completes
-    setTimeout(() => {
-      clearInterval(trailInterval);
-    }, 1500);
+    this.events.on('update', trailUpdate);
   }
 
   private playBallSlideSound() {
@@ -1511,16 +1361,6 @@ class PoolGameScene extends Phaser.Scene {
     // In a real implementation, you would play an audio file:
     // if (this.sound && this.sound.get('ballSlide')) {
     //   this.sound.play('ballSlide', { volume: 0.3 });
-    // }
-  }
-
-  private playPottingSound() {
-    // Add sound effect for successful ball potting
-    console.log('Playing potting sound effect');
-
-    // In a real implementation, you would play an audio file:
-    // if (this.sound && this.sound.get('ballPocketed')) {
-    //   this.sound.play('ballPocketed', { volume: 0.4 });
     // }
   }
 
@@ -1567,22 +1407,12 @@ class PoolGameScene extends Phaser.Scene {
         // Update glow position and fade it out
         glowEffect.setPosition(target.x, target.y);
         glowEffect.setAlpha(target.alpha * 0.5);
-
-        // Add subtle bounce effect as ball falls off table
-        const progress = tween.progress;
-        if (progress > 0.3) {
-          const bounceOffset = Math.sin(progress * Math.PI * 4) * 2;
-          target.y += bounceOffset;
-        }
       },
       onComplete: () => {
         // Remove ball and glow from game
         ball.destroy();
         glowEffect.destroy();
         console.log('Ball removed from table after enhanced sliding animation');
-
-        // Play potting sound effect
-        this.playPottingSound();
       }
     });
   }
@@ -1778,9 +1608,6 @@ class PoolGameScene extends Phaser.Scene {
     // Continuously validate ball boundaries to prevent balls from escaping
     this.validateBallBoundaries();
 
-    // AGGRESSIVE POCKET DETECTION - Check if balls are close to pockets
-    this.checkDistanceBasedPocketDetection();
-
     // Update game logic each frame
     if (this.cueBall && (this.cueBall.body as any).speed < 0.1 && !this.isAiming) {
       // All balls have stopped, check if we should switch turns
@@ -1805,38 +1632,6 @@ class PoolGameScene extends Phaser.Scene {
       const pulse = Math.sin(Date.now() * 0.005) * 10 + 10;
       this.powerIndicator.setSize(this.powerIndicator.width, pulse);
     }
-  }
-
-  private checkDistanceBasedPocketDetection() {
-    // Fallback distance-based pocket detection
-    const pocketPositions = [
-      { x: this.scale.width * 0.18, y: this.scale.height * 0.22 },
-      { x: this.scale.width * 0.5, y: this.scale.height * 0.22 - 10 },
-      { x: this.scale.width * 0.82, y: this.scale.height * 0.22 },
-      { x: this.scale.width * 0.18, y: this.scale.height * 0.78 },
-      { x: this.scale.width * 0.5, y: this.scale.height * 0.78 + 10 },
-      { x: this.scale.width * 0.82, y: this.scale.height * 0.78 }
-    ];
-
-    this.balls.forEach(ball => {
-      if (!ball || !ball.active || ball.getData('type') === 'cue') return;
-
-      const ballType = ball.getData('type');
-      const ballNumber = ball.getData('number');
-
-      // Check distance to each pocket
-      for (let i = 0; i < pocketPositions.length; i++) {
-        const pocket = pocketPositions[i];
-        const distance = Phaser.Math.Distance.Between(ball.x, ball.y, pocket.x, pocket.y);
-        
-        // If ball is very close to pocket (within 30 pixels), trigger potting
-        if (distance < 30) {
-          console.log(`🎱 AGGRESSIVE POCKET DETECTION: Ball ${ballNumber} (${ballType}) detected near pocket ${i}! Distance: ${distance.toFixed(2)}`);
-          this.handleBallPocketed(ball);
-          break;
-        }
-      }
-    });
   }
 }
 

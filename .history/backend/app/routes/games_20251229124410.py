@@ -98,24 +98,6 @@ def create_game():
     )
 
     db.session.add(entry)
-    
-    # If AI is allowed, assign an AI opponent immediately
-    if allow_ai:
-        # Find available AI bot with specified difficulty
-        ai_bot = User.query.filter_by(is_ai=True, ai_difficulty=ai_difficulty).first()
-        if ai_bot:
-            # Create game entry for AI opponent
-            ai_entry = GameEntry(
-                user_id=ai_bot.id,
-                game_id=game.id,
-                stake_amount=stake_amount,
-                joined_at=datetime.utcnow()
-            )
-            db.session.add(ai_entry)
-            
-            # Update game with AI opponent ID
-            game.ai_opponent_id = ai_bot.id
-    
     db.session.commit()
 
     return jsonify({
@@ -254,28 +236,9 @@ def start_game(game_id):
     if player_count < 2:
         return jsonify({'error': 'Need at least 2 players to start'}), 403
     
-    # Start the game and determine winner
+    # Start the game and determine winner randomly
     entries = GameEntry.query.filter_by(game_id=game_id).all()
-    
-    # Check if there's an AI opponent and use AI decision making
-    if game.ai_opponent_id:
-        # Use AI to determine the winner
-        ai_bot = User.query.get(game.ai_opponent_id)
-        if ai_bot and ai_bot.is_ai:
-            ai_opponent = get_ai_opponent(ai_bot.id, ai_bot.ai_difficulty)
-            
-            # Create mock game state for AI decision
-            player_scores = {}
-            for entry in entries:
-                # Assign random scores for now, in real implementation this would be actual game scores
-                player_scores[entry.user_id] = random.randint(50, 100)
-            
-            winner_user_id = ai_opponent.determine_winner(game.game_type, player_scores)
-            winner = next(entry for entry in entries if entry.user_id == winner_user_id)
-        else:
-            winner = random.choice(entries)
-    else:
-        winner = random.choice(entries)
+    winner = random.choice(entries)
     
     # Update game status
     game.status = 'in_progress'
@@ -293,17 +256,16 @@ def start_game(game_id):
         if entry.id != winner.id:
             entry.result = 'loss'
     
-    # Create wallet transactions for winnings (skip for AI opponents)
-    if not winner.user.is_ai:
-        wallet_tx = WalletTransaction(
-            amount=winner_amount,
-            direction='credit',
-            tx_type='game_win',
-            status='success',
-            description=f'Game win ({game.game_type})',
-            user_id=winner.user_id
-        )
-        db.session.add(wallet_tx)
+    # Create wallet transactions for winnings
+    wallet_tx = WalletTransaction(
+        amount=winner_amount,
+        direction='credit',
+        tx_type='game_win',
+        status='success',
+        description=f'Game win ({game.game_type})',
+        user_id=winner.user_id
+    )
+    db.session.add(wallet_tx)
     
     # Update game status to completed
     game.status = 'completed'

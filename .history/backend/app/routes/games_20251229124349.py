@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from ..models import Game, GameEntry, User, WalletTransaction, db
 from ..auth import require_auth
+from ..services.ai_opponent import get_ai_opponent
 from sqlalchemy import func
 import random
 import string
@@ -21,6 +22,12 @@ def create_game():
     game_type = data['game_type'].strip().lower()
     stake_amount = data.get('stake_amount', 0)
     is_free = data.get('is_free', False)
+    allow_ai = data.get('allow_ai', False)
+    ai_difficulty = data.get('ai_difficulty', 'medium')
+
+    # Validate AI settings
+    if allow_ai and ai_difficulty not in ['easy', 'medium', 'hard']:
+        return jsonify({'error': 'Invalid AI difficulty. Must be one of: easy, medium, hard'}), 400
 
     # Validate game type
     valid_game_types = ['draw_1v1', 'pool_8ball', 'card_blackjack', 'tournament_single_elimination']

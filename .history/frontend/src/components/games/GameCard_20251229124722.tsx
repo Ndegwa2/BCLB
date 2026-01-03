@@ -32,8 +32,6 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onJoin, onView }) => {
         return { icon: '🎱', color: 'bg-yellow-500', label: 'Pool 8ball' }
       case 'card_blackjack':
         return { icon: '🃏', color: 'bg-purple-500', label: 'Blackjack' }
-      case 'poker_texas_holdem':
-        return { icon: '♠️', color: 'bg-red-500', label: 'Texas Hold\'em' }
       default:
         return { icon: '🎮', color: 'bg-gray-500', label: type }
     }
@@ -92,11 +90,6 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onJoin, onView }) => {
           <div className="font-mono text-sm text-gray-500">Players</div>
           <div className="font-medium">
             {game.player_count || 1}/{(game.max_players || 2)}
-            {game.allow_ai && (
-              <div className="text-xs text-purple-600 flex items-center mt-1">
-                🤖 AI Ready
-              </div>
-            )}
           </div>
         </div>
 

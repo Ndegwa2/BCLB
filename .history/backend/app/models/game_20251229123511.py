@@ -1,5 +1,5 @@
 from datetime import datetime
-from .. import db
+from ..models import db
 
 class Game(db.Model):
     __tablename__ = 'games'
@@ -13,9 +13,12 @@ class Game(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    allow_ai = db.Column(db.Boolean, default=False)  # Allow AI opponents
+    ai_opponent_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # ID of AI opponent
 
     # Relationships
     entries = db.relationship('GameEntry', backref='game', lazy=True)
+    ai_opponent = db.relationship('User', foreign_keys=[ai_opponent_id], backref='ai_games', lazy=True)
 
     def to_dict(self):
         return {
@@ -25,6 +28,8 @@ class Game(db.Model):
             'stake_amount': float(self.stake_amount),
             'total_pot': float(self.total_pot),
             'status': self.status,
+            'allow_ai': self.allow_ai,
+            'ai_opponent_id': self.ai_opponent_id,
             'created_at': self.created_at.isoformat(),
             'creator_id': self.creator_id
         }
