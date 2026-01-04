@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { GameCard } from './GameCard'
 import { LoadingSpinner } from '../ui/LoadingSpinner'
 import { useAuth } from '../../contexts/AuthContext'
+import { apiClient } from '../../services/api'
 
 interface Game {
   id: number
@@ -34,42 +35,36 @@ export const GameList: React.FC = () => {
   // Fetch open games from API
   useEffect(() => {
     const fetchGames = async () => {
+      // Don't fetch if user is not authenticated
+      if (!authState.isAuthenticated) {
+        setLoading(false)
+        return
+      }
+
       try {
         setLoading(true)
         setError(null)
 
-        const token = localStorage.getItem('token')
         const params = new URLSearchParams({
           page: page.toString(),
           limit: '10',
           ...(filter !== 'all' && { game_type: filter })
         })
 
-        const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000'
-        const response = await fetch(`${apiUrl}/api/games/open?${params}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
+        const response = await apiClient.get(`/games/open?${params}`)
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch games')
-        }
+        setGames(response.data.games || [])
+        setTotalPages(response.data.pagination?.pages || 1)
 
-        const data = await response.json()
-        setGames(data.games || [])
-        setTotalPages(data.pagination?.pages || 1)
-
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch games')
+      } catch (err: any) {
+        setError(err.response?.data?.error || err.message || 'Failed to fetch games')
       } finally {
         setLoading(false)
       }
     }
 
     fetchGames()
-  }, [page, filter])
+  }, [page, filter, authState.isAuthenticated])
 
   // Apply filtering
   useEffect(() => {
@@ -85,28 +80,19 @@ export const GameList: React.FC = () => {
       setJoiningGameId(gameId)
       setError(null)
 
-      const token = localStorage.getItem('token')
-      const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000'
-      const response = await fetch(`${apiUrl}/api/games/${gameId}/join`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      // Debug: Check authentication state
+      console.log('Joining game:', gameId)
+      console.log('Auth state:', authState)
+      console.log('Token exists:', !!authState.token)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to join game')
-      }
-
-      const data = await response.json()
+      const response = await apiClient.post(`/games/${gameId}/join`)
       
       // Navigate to the game play page
       navigate(`/games/${gameId}/play`)
       
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to join game')
+    } catch (err: any) {
+      console.error('Join error:', err)
+      setError(err.response?.data?.error || err.message || 'Failed to join game')
     } finally {
       setJoiningGameId(null)
     }
@@ -170,7 +156,11 @@ export const GameList: React.FC = () => {
       </div>
 
       {/* Loading State */}
-      {loading ? (
+      {!authState.isAuthenticated ? (
+        <div className="text-center py-12 text-gray-500">
+          Please log in to view and join games.
+        </div>
+      ) : loading ? (
         <div className="flex justify-center py-12">
           <LoadingSpinner size="lg" />
         </div>
