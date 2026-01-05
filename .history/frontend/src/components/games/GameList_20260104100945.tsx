@@ -35,14 +35,8 @@ export const GameList: React.FC = () => {
   // Fetch open games from API
   useEffect(() => {
     const fetchGames = async () => {
-      // Don't fetch if user is not authenticated
-      if (!authState.isAuthenticated) {
-        setLoading(false)
-        return
-      }
-
       try {
-        setLoading(page === 1) // Only show loading spinner for initial load or page changes
+        setLoading(true)
         setError(null)
 
         const params = new URLSearchParams({
@@ -64,34 +58,7 @@ export const GameList: React.FC = () => {
     }
 
     fetchGames()
-  }, [page, filter, authState.isAuthenticated])
-
-  // Auto-refresh games list every 10 seconds to prevent stale data
-  useEffect(() => {
-    if (!authState.isAuthenticated) return
-
-    const interval = setInterval(() => {
-      // Only refresh if not currently loading and not on a different page
-      if (!loading && page === 1) {
-        const params = new URLSearchParams({
-          page: '1',
-          limit: '10',
-          ...(filter !== 'all' && { game_type: filter })
-        })
-
-        apiClient.get(`/games/open?${params}`)
-          .then(response => {
-            setGames(response.data.games || [])
-            setTotalPages(response.data.pagination?.pages || 1)
-          })
-          .catch(err => {
-            console.warn('Auto-refresh failed:', err)
-          })
-      }
-    }, 10000) // Refresh every 10 seconds
-
-    return () => clearInterval(interval)
-  }, [authState.isAuthenticated, loading, page, filter])
+  }, [page, filter])
 
   // Apply filtering
   useEffect(() => {
@@ -103,83 +70,32 @@ export const GameList: React.FC = () => {
   }, [games, filter])
 
   const handleJoin = async (gameId: number) => {
-    // Pre-join validation to prevent unnecessary API calls
-    const gameToJoin = games.find(g => g.id === gameId)
-    if (!gameToJoin) {
-      setError('Game not found. Please refresh the list.')
-      return
-    }
-
-    if (gameToJoin.status !== 'waiting') {
-      setError('This game is no longer available for joining. Please try another game.')
-      return
-    }
-
-    // Check if game appears to be full (based on current data)
-    if (gameToJoin.player_count && gameToJoin.player_count >= 2) {
-      setError('This game appears to be full. Please join a different game.')
-      return
-    }
-
     try {
       setJoiningGameId(gameId)
       setError(null)
 
-      // Debug: Check authentication state
-      console.log('Joining game:', gameId)
-      console.log('Auth state:', authState)
-      console.log('Token exists:', !!authState.token)
+      const token = localStorage.getItem('token')
+      const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000'
+      const response = await fetch(`${apiUrl}/api/games/${gameId}/join`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
 
-      const response = await apiClient.post(`/games/${gameId}/join`)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to join game')
+      }
+
+      const data = await response.json()
       
       // Navigate to the game play page
       navigate(`/games/${gameId}/play`)
       
-    } catch (err: any) {
-      console.error('Join error details:', {
-        error: err,
-        response: err.response,
-        data: err.response?.data,
-        status: err.response?.status,
-        message: err.message
-      })
-      
-      let errorMessage = 'Failed to join game'
-      
-      // Try to extract error message from various possible response formats
-      if (err.response?.data?.error) {
-        errorMessage = err.response.data.error
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message
-      } else if (err.response?.data) {
-        errorMessage = String(err.response.data)
-      } else if (err.message) {
-        errorMessage = err.message
-      }
-      
-      // Provide specific error messages for different scenarios
-      if (errorMessage === 'Already joined this game') {
-        setError('You have already joined this game. Redirecting to the game...')
-        // Redirect to the game after a short delay
-        setTimeout(() => navigate(`/games/${gameId}/play`), 2000)
-      } else if (errorMessage === 'Game is full') {
-        setError('This game is already full. Please join a different game.')
-      } else if (errorMessage === 'Game is not available to join') {
-        setError('This game is no longer available. Please refresh the list or try another game.')
-        // Refresh the game list to show updated status
-        setTimeout(() => {
-          window.location.reload()
-        }, 3000)
-      } else if (err.response?.status === 409) {
-        // Handle generic 409 conflicts
-        if (errorMessage === 'Failed to join game') {
-          setError('Cannot join this game. It may be full, already joined, or no longer available.')
-        } else {
-          setError(`Cannot join game: ${errorMessage}`)
-        }
-      } else {
-        setError(`Failed to join game: ${errorMessage}`)
-      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to join game')
     } finally {
       setJoiningGameId(null)
     }
@@ -243,11 +159,7 @@ export const GameList: React.FC = () => {
       </div>
 
       {/* Loading State */}
-      {!authState.isAuthenticated ? (
-        <div className="text-center py-12 text-gray-500">
-          Please log in to view and join games.
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div className="flex justify-center py-12">
           <LoadingSpinner size="lg" />
         </div>

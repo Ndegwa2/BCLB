@@ -264,9 +264,6 @@ class PoolGameScene extends Phaser.Scene {
   private ballsRemaining: { solid: number, stripe: number } = { solid: 7, stripe: 7 };
   private firstBallHit: Phaser.Physics.Matter.Sprite | null = null;
   private ballsPocketedThisTurn: { number: number; type: string }[] = [];
-  private foulsThisTurn: string[] = [];
-  private extraShotsRemaining: number = 0;
-  private playerBallRacks: { player0: Phaser.GameObjects.Container, player1: Phaser.GameObjects.Container } | null = null;
   private pocketPositions: { x: number; y: number }[] = [];
   private tableBounds = { left: 0, right: 0, top: 0, bottom: 0, feltLeft: 0, feltRight: 0, feltTop: 0, feltBottom: 0 };
   private ballInHand = false;
@@ -295,7 +292,6 @@ class PoolGameScene extends Phaser.Scene {
     this.createCueStick();
     this.setupInput();
     this.createUI();
-    this.createPlayerBallRacks();
     this.setupEventListeners();
     
     this.gameStarted = true;
@@ -669,31 +665,6 @@ class PoolGameScene extends Phaser.Scene {
     }
   }
 
-  private drawSmallNumberOnBall(graphics: Phaser.GameObjects.Graphics, centerX: number, centerY: number, number: number, radius: number) {
-    const textColor = 0xffffff;
-    const digitScale = 3;
-    const offsetX = centerX;
-    const offsetY = centerY;
-    
-    // Draw each digit using circles
-    const digits = number.toString().split('').map(d => parseInt(d));
-    let startX = offsetX - ((digits.length - 1) * digitScale) / 2;
-    
-    digits.forEach((digit, index) => {
-      const x = startX + index * digitScale * 2;
-      this.drawSmallDigit(graphics, x, offsetY, digit, textColor, digitScale);
-    });
-  }
-
-  private drawSmallDigit(graphics: Phaser.GameObjects.Graphics, x: number, y: number, digit: number, color: number, scale: number) {
-    const segments = this.getDigitSegments(digit);
-    
-    segments.forEach(([sx, sy, r]) => {
-      graphics.fillStyle(color, 0.9);
-      graphics.fillCircle(x + sx * scale/2, y + sy * scale/2, r * 0.3);
-    });
-  }
-
   private getRackPositions(centerX: number, centerY: number, ballRadius: number): {x: number; y: number}[] {
     const positions: {x: number; y: number}[] = [];
     const spacing = ballRadius * 2 + 1;
@@ -862,8 +833,13 @@ class PoolGameScene extends Phaser.Scene {
         icon.fillStyle(0x000000, 0.9);
         icon.fillCircle(x, 0, ballRadius * 0.4);
         
-        // Draw number using graphics circles
-        this.drawSmallNumberOnBall(icon, x, 0, ballNumber, ballRadius * 0.4);
+        // Draw number
+        const numberText = this.add.text(x, 0, ballNumber.toString(), {
+          fontSize: '8px',
+          color: '#ffffff',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        icon.add(numberText);
       }
       
       // Border
@@ -878,11 +854,6 @@ class PoolGameScene extends Phaser.Scene {
     this.matter.world.on('collisionstart', (event: any) => {
       this.handleCollisionStart(event);
     }, this);
-    
-    // Track ball collisions for foul detection
-    this.matter.world.on('collisionstart', (event: any) => {
-      this.handleBallCollisions(event);
-    }, this);
   }
 
   private handleCollisionStart(event: any) {
@@ -895,209 +866,6 @@ class PoolGameScene extends Phaser.Scene {
       } else if (bodyB.label?.startsWith('pocket-')) {
         this.handlePocketCollision(bodyA);
       }
-    });
-  }
-
-  private handleBallCollisions(event: any) {
-    if (this.gameType !== 'eightball' || this.gameOver) return;
-    
-    event.pairs.forEach((pair: any) => {
-      const { bodyA, bodyB } = pair;
-      const ballA = bodyA.gameObject;
-      const ballB = bodyB.gameObject;
-      
-      // Check if cue ball hit something
-      if (ballA && ballB && ballA !== ballB) {
-        const cueBall = ballA.getData('type') === 'cue' ? ballA : (ballB.getData('type') === 'cue' ? ballB : null);
-        const otherBall = cueBall === ballA ? ballB : ballA;
-        
-        if (cueBall && otherBall && !this.firstBallHit) {
-          this.firstBallHit = otherBall;
-          this.checkFouls(otherBall);
-        }
-      }
-    });
-  }
-
-  private checkFouls(hitBall: Phaser.Physics.Matter.Sprite) {
-    if (!this.currentPlayerGroup || this.gameOver) return;
-    
-    const ballType = hitBall.getData('type');
-    const ballNumber = hitBall.getData('number');
-    const currentPlayer = this.currentPlayerTurn;
-    const opponentPlayer = (currentPlayer + 1) % 2;
-    
-    // Check for fouls
-    const fouls: string[] = [];
-    
-    // 1. Hitting opponent's ball first
-    if (ballType !== 'cue' && ballType !== 'eight') {
-      const isOpponentBall = (this.currentPlayerGroup === 'solid' && ballType === 'stripe') ||
-                            (this.currentPlayerGroup === 'stripe' && ballType === 'solid');
-      
-      if (isOpponentBall) {
-        fouls.push('opponent_ball_first');
-      }
-    }
-    
-    // 2. Hitting black ball first (before clearing group)
-    if (ballNumber === 8 && this.ballsRemaining.solid > 0 && this.ballsRemaining.stripe > 0) {
-      fouls.push('black_ball_first');
-    }
-    
-    // 3. No ball hit at all (handled separately when turn ends)
-    
-    if (fouls.length > 0) {
-      this.foulsThisTurn.push(...fouls);
-      this.handleFoul(fouls);
-    }
-  }
-
-  private handleFoul(fouls: string[]) {
-    const foulMessages: Record<string, string> = {
-      'opponent_ball_first': 'Foul! Hit opponent\'s ball first',
-      'black_ball_first': 'Foul! Hit black ball before clearing group'
-    };
-    
-    fouls.forEach(foul => {
-      this.updateMessage(foulMessages[foul] || 'Foul!');
-      
-      // Give opponent 2 extra shots
-      this.extraShotsRemaining = 2;
-      this.updateTurnIndicator();
-    });
-  }
-
-  private createPlayerBallRacks() {
-    const { feltLeft, feltRight, feltTop, feltBottom } = this.tableBounds;
-    
-    // Create left player rack (Player 1)
-    const leftRack = this.add.container(feltLeft - 80, (feltTop + feltBottom) / 2);
-    this.createIndividualBallRack(leftRack, 'PLAYER 1', 0);
-    
-    // Create right player rack (Player 2)
-    const rightRack = this.add.container(feltRight + 80, (feltTop + feltBottom) / 2);
-    this.createIndividualBallRack(rightRack, 'PLAYER 2', 1);
-    
-    this.playerBallRacks = {
-      player0: leftRack,
-      player1: rightRack
-    };
-  }
-
-  private createIndividualBallRack(container: Phaser.GameObjects.Container, title: string, playerIndex: number) {
-    // Rack background
-    const bg = this.add.graphics();
-    bg.fillStyle(0x2d1f0f, 1); // Wood color
-    bg.fillRoundedRect(-40, -80, 80, 160, 10);
-    
-    // Wood grain
-    bg.lineStyle(1, 0x3d2a15, 0.8);
-    for (let i = 0; i < 12; i++) {
-      const y = -75 + i * 12;
-      bg.lineBetween(-35, y, 35, y + (i % 2 === 0 ? 2 : -2));
-    }
-    
-    container.add(bg);
-    
-    // Title
-    const titleText = this.add.text(0, -90, title, {
-      fontSize: '10px',
-      color: '#ffd700',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-    container.add(titleText);
-    
-    // Player indicator light
-    const playerLight = this.add.graphics();
-    playerLight.fillStyle(playerIndex === 0 ? 0x00ff00 : 0xff6600, 1);
-    playerLight.fillCircle(0, -70, 6);
-    playerLight.lineStyle(2, 0x000000, 1);
-    playerLight.strokeCircle(0, -70, 6);
-    container.add(playerLight);
-    
-    // Ball slots (7 slots for solids/stripes)
-    const ballRadius = 8;
-    const startY = -50;
-    const spacing = 20;
-    
-    for (let i = 0; i < 7; i++) {
-      const y = startY + i * spacing;
-      
-      // Placeholder slot
-      const slot = this.add.graphics();
-      slot.lineStyle(1, 0x8b7355, 0.5); // Bronze color
-      slot.strokeCircle(0, y, ballRadius + 1);
-      slot.lineStyle(1, 0x5a4025, 0.3);
-      slot.strokeCircle(0, y, ballRadius + 3);
-      
-      container.add(slot);
-    }
-    
-    // Extra shots indicator
-    const shotsText = this.add.text(0, 70, 'SHOTS: 1', {
-      fontSize: '10px',
-      color: '#ffffff'
-    }).setOrigin(0.5);
-    container.add(shotsText);
-    
-    (container as any).shotsText = shotsText;
-    (container as any).playerIndex = playerIndex;
-  }
-
-  private updatePlayerBallRacks() {
-    if (!this.playerBallRacks) return;
-    
-    // Update both player racks
-    [0, 1].forEach(playerIndex => {
-      const rack = playerIndex === 0 ? this.playerBallRacks.player0 : this.playerBallRacks.player1;
-      const container = rack as Phaser.GameObjects.Container;
-      
-      // Clear existing ball icons
-      const children = container.getAll();
-      children.forEach(child => {
-        if (child.getData && child.getData('isPlayerBallIcon')) {
-          child.destroy();
-        }
-      });
-      
-      // Get balls for this player
-      const playerBalls = this.pocketedBalls.filter(b => b.player === playerIndex);
-      
-      // Update shots indicator
-      const shotsText = (container as any).shotsText;
-      const isCurrentPlayer = this.currentPlayerTurn === playerIndex;
-      const shotsRemaining = isCurrentPlayer && this.extraShotsRemaining > 0 ? this.extraShotsRemaining : 1;
-      
-      shotsText.setText(`SHOTS: ${shotsRemaining}`);
-      shotsText.setColor(isCurrentPlayer ? '#00ff00' : '#ffffff');
-      
-      // Add ball icons
-      playerBalls.forEach((ball, index) => {
-        if (index < 7) { // Only show first 7 balls
-          const y = -50 + index * 20;
-          
-          const icon = this.add.graphics();
-          icon.setData('isPlayerBallIcon', true);
-          
-          let color = 0xffffff;
-          if (ball.type === 'solid') color = 0xffd700;
-          else if (ball.type === 'stripe') color = 0xff0000;
-          
-          icon.fillStyle(color, 1);
-          icon.fillCircle(0, y, 8);
-          
-          if (ball.type === 'stripe') {
-            icon.fillStyle(0xffffff, 1);
-            icon.fillRect(-3, y - 8, 6, 16);
-          }
-          
-          icon.lineStyle(1, 0xcccccc, 0.8);
-          icon.strokeCircle(0, y, 8);
-          
-          container.add(icon);
-        }
-      });
     });
   }
 
@@ -1124,7 +892,6 @@ class PoolGameScene extends Phaser.Scene {
     this.ballsPocketedThisTurn.push({ number: ballNumber, type: ballType });
     this.pocketedBalls.push({ number: ballNumber, type: ballType, player: this.currentPlayerTurn });
     this.updatePortedBallsDisplay();
-    this.updatePlayerBallRacks();
     
     // Update remaining balls
     if (ballType === 'solid') this.ballsRemaining.solid--;
@@ -1345,14 +1112,6 @@ class PoolGameScene extends Phaser.Scene {
     this.firstBallHit = null;
     this.ballsPocketedThisTurn = [];
     
-    // Handle extra shots from fouls
-    if (this.extraShotsRemaining > 0) {
-      this.extraShotsRemaining--;
-      this.updatePlayerBallRacks();
-      this.updateMessage(`Extra shot remaining: ${this.extraShotsRemaining}`);
-      return; // Continue current player's turn
-    }
-    
     // Determine if turn continues (pocketed legal ball)
     let continueTurn = false;
     if (this.ballsPocketedThisTurn.length > 0) {
@@ -1391,11 +1150,9 @@ class PoolGameScene extends Phaser.Scene {
     if (!continueTurn) {
       this.currentPlayerTurn = (this.currentPlayerTurn + 1) % 2;
       this.currentPlayerGroup = this.playerGroups[`player${this.currentPlayerTurn}` as keyof typeof this.playerGroups] || null;
-      this.extraShotsRemaining = 0; // Reset extra shots when turn changes
     }
     
     this.updateTurnIndicator();
-    this.updatePlayerBallRacks();
   }
 
   private updateTurnIndicator() {
@@ -1405,9 +1162,8 @@ class PoolGameScene extends Phaser.Scene {
     if (!currentPlayer) return;
     
     const isCurrentUser = currentPlayer.userId === this.gameData.currentUserId;
-    const extraShotsText = this.extraShotsRemaining > 0 ? ` (Extra Shots: ${this.extraShotsRemaining})` : '';
     
-    this.turnText.setText(`${currentPlayer.username}'s Turn${extraShotsText}`);
+    this.turnText.setText(`${currentPlayer.username}'s Turn`);
     this.turnText.setColor(isCurrentUser ? '#00ff00' : '#ff6600');
   }
 
@@ -1476,12 +1232,6 @@ class PoolGameScene extends Phaser.Scene {
       const anyBallMoving = activeBalls.some(ball => ball !== this.cueBall && this.getBallSpeed(ball) > 0.1);
       
       if (cueSpeed < 0.1 && !anyBallMoving) {
-        // Check for foul if no ball was hit
-        if (!this.firstBallHit && this.gameType === 'eightball') {
-          this.foulsThisTurn.push('no_ball_hit');
-          this.handleFoul(['no_ball_hit']);
-        }
-        
         this.turnSwitchScheduled = true;
         this.time.delayedCall(1000, () => {
           if (this.gameStarted && !this.gameOver) {
@@ -1538,7 +1288,7 @@ class PoolGameScene extends Phaser.Scene {
   private checkPockets() {
     if (this.gameOver) return;
     
-    const pocketRadius = 20; // Smaller radius for more realistic pocketing
+    const pocketRadius = 28;
     const pocketRadiusSq = pocketRadius ** 2;
     
     this.balls.forEach(ball => {
@@ -1547,18 +1297,12 @@ class PoolGameScene extends Phaser.Scene {
       
       const ballX = ball.x;
       const ballY = ball.y;
-      const ballSpeed = this.getBallSpeed(ball);
       
       for (const pocket of this.pocketPositions) {
         const dx = ballX - pocket.x;
         const dy = ballY - pocket.y;
-        const distanceSq = dx * dx + dy * dy;
-        
-        // Check if ball is close enough to pocket and moving slowly enough
-        if (distanceSq < pocketRadiusSq && ballSpeed < 2) {
-          // Ball pocketed - add visual effect
-          this.createPocketingEffect(pocket.x, pocket.y, ball.getData('type'));
-          
+        if (dx * dx + dy * dy < pocketRadiusSq) {
+          // Ball pocketed
           ball.setData('pocketed', true);
           ball.setActive(false);
           ball.setVisible(false);
@@ -1571,12 +1315,6 @@ class PoolGameScene extends Phaser.Scene {
           this.pocketedBalls.push({ number: ballNumber, type: ballType, player: this.currentPlayerTurn });
           this.updatePortedBallsDisplay();
           
-          // Update message
-          const currentPlayer = this.gameData?.players?.[this.currentPlayerTurn];
-          if (currentPlayer) {
-            this.updateMessage(`${currentPlayer.username} pocketed ${ballType === 'solid' ? 'a solid' : ballType === 'stripe' ? 'a stripe' : 'the 8-ball'}!`);
-          }
-          
           if (ballType === 'solid') this.ballsRemaining.solid--;
           if (ballType === 'stripe') this.ballsRemaining.stripe--;
           
@@ -1587,35 +1325,6 @@ class PoolGameScene extends Phaser.Scene {
         }
       }
     });
-  }
-
-  private createPocketingEffect(x: number, y: number, ballType: string) {
-    // Create a small explosion/particle effect using graphics
-    const particleCount = 12;
-    const colors = [0xffd700, 0xff0000, 0x00ff00, 0x0000ff, 0xff00ff];
-    
-    for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 * i) / particleCount;
-      const speed = 50 + Math.random() * 50;
-      const life = 300 + Math.random() * 200;
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      
-      const particle = this.add.graphics();
-      particle.fillStyle(color, 1);
-      particle.fillCircle(x, y, 3);
-      
-      // Animate particle
-      this.tweens.add({
-        targets: particle,
-        x: x + Math.cos(angle) * speed,
-        y: y + Math.sin(angle) * speed,
-        alpha: 0,
-        duration: life,
-        onComplete: () => {
-          particle.destroy();
-        }
-      });
-    }
   }
 }
 

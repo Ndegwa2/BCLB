@@ -136,26 +136,8 @@ export const GameList: React.FC = () => {
       navigate(`/games/${gameId}/play`)
       
     } catch (err: any) {
-      console.error('Join error details:', {
-        error: err,
-        response: err.response,
-        data: err.response?.data,
-        status: err.response?.status,
-        message: err.message
-      })
-      
-      let errorMessage = 'Failed to join game'
-      
-      // Try to extract error message from various possible response formats
-      if (err.response?.data?.error) {
-        errorMessage = err.response.data.error
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message
-      } else if (err.response?.data) {
-        errorMessage = String(err.response.data)
-      } else if (err.message) {
-        errorMessage = err.message
-      }
+      console.error('Join error:', err)
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to join game'
       
       // Provide specific error messages for different scenarios
       if (errorMessage === 'Already joined this game') {
@@ -171,12 +153,7 @@ export const GameList: React.FC = () => {
           window.location.reload()
         }, 3000)
       } else if (err.response?.status === 409) {
-        // Handle generic 409 conflicts
-        if (errorMessage === 'Failed to join game') {
-          setError('Cannot join this game. It may be full, already joined, or no longer available.')
-        } else {
-          setError(`Cannot join game: ${errorMessage}`)
-        }
+        setError('Cannot join this game due to a conflict. Please try a different game.')
       } else {
         setError(`Failed to join game: ${errorMessage}`)
       }

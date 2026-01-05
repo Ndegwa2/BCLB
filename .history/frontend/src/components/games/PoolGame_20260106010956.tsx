@@ -1345,14 +1345,6 @@ class PoolGameScene extends Phaser.Scene {
     this.firstBallHit = null;
     this.ballsPocketedThisTurn = [];
     
-    // Handle extra shots from fouls
-    if (this.extraShotsRemaining > 0) {
-      this.extraShotsRemaining--;
-      this.updatePlayerBallRacks();
-      this.updateMessage(`Extra shot remaining: ${this.extraShotsRemaining}`);
-      return; // Continue current player's turn
-    }
-    
     // Determine if turn continues (pocketed legal ball)
     let continueTurn = false;
     if (this.ballsPocketedThisTurn.length > 0) {
@@ -1391,11 +1383,9 @@ class PoolGameScene extends Phaser.Scene {
     if (!continueTurn) {
       this.currentPlayerTurn = (this.currentPlayerTurn + 1) % 2;
       this.currentPlayerGroup = this.playerGroups[`player${this.currentPlayerTurn}` as keyof typeof this.playerGroups] || null;
-      this.extraShotsRemaining = 0; // Reset extra shots when turn changes
     }
     
     this.updateTurnIndicator();
-    this.updatePlayerBallRacks();
   }
 
   private updateTurnIndicator() {
@@ -1405,9 +1395,8 @@ class PoolGameScene extends Phaser.Scene {
     if (!currentPlayer) return;
     
     const isCurrentUser = currentPlayer.userId === this.gameData.currentUserId;
-    const extraShotsText = this.extraShotsRemaining > 0 ? ` (Extra Shots: ${this.extraShotsRemaining})` : '';
     
-    this.turnText.setText(`${currentPlayer.username}'s Turn${extraShotsText}`);
+    this.turnText.setText(`${currentPlayer.username}'s Turn`);
     this.turnText.setColor(isCurrentUser ? '#00ff00' : '#ff6600');
   }
 
@@ -1476,12 +1465,6 @@ class PoolGameScene extends Phaser.Scene {
       const anyBallMoving = activeBalls.some(ball => ball !== this.cueBall && this.getBallSpeed(ball) > 0.1);
       
       if (cueSpeed < 0.1 && !anyBallMoving) {
-        // Check for foul if no ball was hit
-        if (!this.firstBallHit && this.gameType === 'eightball') {
-          this.foulsThisTurn.push('no_ball_hit');
-          this.handleFoul(['no_ball_hit']);
-        }
-        
         this.turnSwitchScheduled = true;
         this.time.delayedCall(1000, () => {
           if (this.gameStarted && !this.gameOver) {
