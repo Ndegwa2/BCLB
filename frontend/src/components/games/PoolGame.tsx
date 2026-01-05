@@ -275,6 +275,9 @@ class PoolGameScene extends Phaser.Scene {
   private ballsHaveMoved = false;
   private lastTurnSwitchTime = 0;
   private frameCount = 0;
+  private STOP_THRESHOLD = 0.05;
+  private inputListenersRegistered = false;
+  private canShoot = true;
 
   constructor() {
     super({ key: 'PoolGameScene' });
@@ -297,6 +300,17 @@ class PoolGameScene extends Phaser.Scene {
     this.createUI();
     this.createPlayerBallRacks();
     this.setupEventListeners();
+    
+    // Disable Matter.js sleeping to prevent input issues
+    this.matter.world.engine.enableSleeping = false;
+    
+    // Disable sleeping on all balls
+    this.balls.forEach(ball => {
+      if (ball.body) {
+        (ball.body as any).isSleeping = false;
+        (ball.body as any).sleepThreshold = Infinity;
+      }
+    });
     
     this.gameStarted = true;
     this.gameType = 'break';
@@ -720,9 +734,18 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private setupInput() {
+    // Prevent event listener stacking - remove existing listeners first
+    if (this.inputListenersRegistered) {
+      this.input.off('pointerdown', this.handlePointerDown, this);
+      this.input.off('pointermove', this.handlePointerMove, this);
+      this.input.off('pointerup', this.handlePointerUp, this);
+    }
+    
     this.input.on('pointerdown', this.handlePointerDown, this);
     this.input.on('pointermove', this.handlePointerMove, this);
     this.input.on('pointerup', this.handlePointerUp, this);
+    
+    this.inputListenersRegistered = true;
   }
 
   private createUI() {
@@ -1050,7 +1073,7 @@ class PoolGameScene extends Phaser.Scene {
     
     // Update both player racks
     [0, 1].forEach(playerIndex => {
-      const rack = playerIndex === 0 ? this.playerBallRacks.player0 : this.playerBallRacks.player1;
+      const rack = playerIndex === 0 ? this.playerBallRacks!.player0 : this.playerBallRacks!.player1;
       const container = rack as Phaser.GameObjects.Container;
       
       // Clear existing ball icons
@@ -1340,10 +1363,12 @@ class PoolGameScene extends Phaser.Scene {
     if (now - this.lastTurnSwitchTime < 500) return;
     this.lastTurnSwitchTime = now;
     
+    // End turn cleanup - always reset state
     this.turnSwitchScheduled = false;
     this.ballsHaveMoved = false;
     this.firstBallHit = null;
     this.ballsPocketedThisTurn = [];
+    this.foulsThisTurn = [];
     
     // Handle extra shots from fouls
     if (this.extraShotsRemaining > 0) {
@@ -1454,6 +1479,9 @@ class PoolGameScene extends Phaser.Scene {
   update() {
     this.frameCount++;
     
+    // Clamp physics timestep to prevent explosions
+    const delta = Math.min(this.game.loop.delta, 16.66);
+    
     // Boundary validation every 5 frames
     if (this.frameCount % 5 === 0) {
       this.validateBoundaries();
@@ -1464,18 +1492,11 @@ class PoolGameScene extends Phaser.Scene {
       this.checkPockets();
     }
     
-    // Turn management
+    // Turn management - improved velocity threshold logic
     if (this.cueBall && this.cueBall.active && this.ballsHaveMoved && !this.turnSwitchScheduled) {
-      const cueSpeed = Math.sqrt(
-        (this.cueBall.body?.velocity?.x || 0) ** 2 +
-        (this.cueBall.body?.velocity?.y || 0) ** 2
-      );
+      const allBallsStopped = this.checkAllBallsStopped();
       
-      // Count active balls (excluding pocketed ones)
-      const activeBalls = this.balls.filter(ball => ball.active && !ball.getData('pocketed'));
-      const anyBallMoving = activeBalls.some(ball => ball !== this.cueBall && this.getBallSpeed(ball) > 0.1);
-      
-      if (cueSpeed < 0.1 && !anyBallMoving) {
+      if (allBallsStopped) {
         // Check for foul if no ball was hit
         if (!this.firstBallHit && this.gameType === 'eightball') {
           this.foulsThisTurn.push('no_ball_hit');
@@ -1498,6 +1519,43 @@ class PoolGameScene extends Phaser.Scene {
     if (!ball || !ball.body || !ball.body.velocity) return 0;
     const vel = ball.body.velocity;
     return Math.sqrt(vel.x ** 2 + vel.y ** 2);
+  }
+
+  private checkAllBallsStopped(): boolean {
+    // Check if all active balls have stopped moving (using velocity threshold)
+    const activeBalls = this.balls.filter(ball => ball.active && !ball.getData('pocketed'));
+    
+    return activeBalls.every(ball => {
+      if (!ball.body || !ball.body.velocity) return true;
+      
+      const vx = Math.abs(ball.body.velocity.x);
+      const vy = Math.abs(ball.body.velocity.y);
+      
+      return vx < this.STOP_THRESHOLD && vy < this.STOP_THRESHOLD;
+    });
+  }
+
+  private endTurn() {
+    // Comprehensive turn end cleanup
+    this.canShoot = true;
+    this.isAiming = false;
+    this.shotPower = 0;
+    this.firstBallHit = null;
+    this.ballsPocketedThisTurn = [];
+    this.foulsThisTurn = [];
+    this.ballsHaveMoved = false;
+    this.turnSwitchScheduled = false;
+    
+    // Clean up any remaining UI elements
+    if (this.cue) {
+      this.cue.destroy();
+      this.cue = null;
+    }
+    
+    if (this.powerIndicator) {
+      this.powerIndicator.destroy();
+      this.powerIndicator = null;
+    }
   }
 
   private validateBoundaries() {
