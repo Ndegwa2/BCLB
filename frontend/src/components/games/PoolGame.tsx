@@ -211,6 +211,12 @@ const PoolGame: React.FC = () => {
 
   // Actually start the game after opponent selection
   const startGameWithOpponent = () => {
+    // 🔒 GUARD: Prevent Phaser re-creation
+    if (phaserGameRef.current) {
+      console.log('[Phaser Debug] Game already exists, skipping creation');
+      return;
+    }
+
     if (!gameRef.current || !currentGame) return;
 
     setGameStarted(true);
@@ -258,6 +264,7 @@ const PoolGame: React.FC = () => {
     });
 
     phaserGameRef.current = new Phaser.Game(config);
+    console.log('[Phaser Debug] Phaser game created successfully');
 
     // Add WebGL context loss/restoration handlers
     const canvasElement = gameContainer.querySelector('canvas');
