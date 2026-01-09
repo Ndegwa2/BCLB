@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGame } from '../../contexts/GameContext';
+import { apiClient } from '../../services/api';
 import { GameEntry, PoolGameState } from '../../types/game';
 import { User } from '../../types/auth';
 import * as Phaser from 'phaser';
@@ -27,15 +28,43 @@ const PoolGame: React.FC = () => {
     gameType: 'pool_8ball'
   });
 
+  const [opponentSelection, setOpponentSelection] = useState<{
+    show: boolean;
+    opponentType: 'human' | 'ai' | null;
+    difficulty: 'easy' | 'medium' | 'hard' | null;
+  }>({
+    show: false,
+    opponentType: null,
+    difficulty: null
+  });
+
   const [gameStarted, setGameStarted] = useState(false);
+  const [playerCount, setPlayerCount] = useState(1);
 
   // Find the current game from context
   const currentGame = activeGames.find(g => g.id === Number(gameId));
 
-  useEffect(() => {
-    if (!currentGame) return;
+  // Check if game already has AI opponent assigned (from game creation)
+  const hasAIOpponent = currentGame?.entries?.some((entry: any) =>
+    entry.user_id === 999 || entry.username?.startsWith('AI ')
+  ) || currentGame?.opponent_type === 'ai';
 
-    const initializeGame = () => {
+  // Auto-start game if AI opponent was already assigned during game creation
+  useEffect(() => {
+    if (!currentGame || gameStarted) return;
+
+    // If game already has AI opponent, start immediately
+    if (hasAIOpponent) {
+      const aiDifficulty = currentGame.ai_difficulty || 'medium';
+      
+      // Set opponent selection to AI
+      setOpponentSelection({
+        show: false,
+        opponentType: 'ai',
+        difficulty: aiDifficulty
+      });
+
+      // Initialize game state with AI player
       const mockEntries: GameEntry[] = currentGame.entries || [
         {
           id: 1,
@@ -49,11 +78,8 @@ const PoolGame: React.FC = () => {
           updated_at: new Date().toISOString(),
           username: authState.user?.username || 'Player 1',
           user: authState.user
-        }
-      ];
-
-      if (mockEntries.length === 1 && authState.user) {
-        mockEntries.push({
+        },
+        {
           id: 2,
           user_id: 999,
           game_id: currentGame.id,
@@ -63,17 +89,17 @@ const PoolGame: React.FC = () => {
           payout_amount: 0,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          username: 'Opponent',
+          username: `AI ${aiDifficulty.charAt(0).toUpperCase()}${aiDifficulty.slice(1)}`,
           user: {
             id: 999,
-            username: 'Opponent',
+            username: `AI ${aiDifficulty.charAt(0).toUpperCase()}${aiDifficulty.slice(1)}`,
             phone_number: '0000000000',
             is_admin: false,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           } as User
-        });
-      }
+        }
+      ];
 
       setGameState((prev: PoolGameState) => ({
         ...prev,
@@ -85,6 +111,84 @@ const PoolGame: React.FC = () => {
           userId: entry.user_id
         }))
       }));
+
+      // Start the game
+      setTimeout(() => startGameWithOpponent(), 500);
+    }
+  }, [currentGame, hasAIOpponent, authState.user]);
+
+  // Poll for player updates when waiting for opponent
+  useEffect(() => {
+    if (!currentGame || gameStarted || opponentSelection.opponentType === 'ai' || hasAIOpponent) return;
+
+    const fetchPlayerCount = async () => {
+      try {
+        const response = await apiClient.get(`/games/${currentGame.id}`);
+        const newCount = response.data.game?.player_count || 1;
+        setPlayerCount(newCount);
+        
+        // If second player joined, update game state with new entries
+        if (newCount >= 2 && gameState.players.length < 2) {
+          const gameData = response.data.game;
+          if (gameData.entries && gameData.entries.length > 1) {
+            setGameState(prev => ({
+              ...prev,
+              players: gameData.entries.map((entry: any) => ({
+                id: entry.user_id,
+                username: entry.username || `Player ${entry.user_id}`,
+                isCurrentUser: entry.user_id === authState.user?.id,
+                userId: entry.user_id
+              }))
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch player count:', error);
+      }
+    };
+
+    // Initial fetch
+    fetchPlayerCount();
+
+    // Poll every 3 seconds
+    const interval = setInterval(fetchPlayerCount, 3000);
+
+    return () => clearInterval(interval);
+  }, [currentGame, gameStarted, opponentSelection.opponentType, authState.user?.id, gameState.players.length]);
+
+  useEffect(() => {
+    if (!currentGame) return;
+
+    const initializeGame = () => {
+      // Only initialize with default opponent if no selection has been made
+      if (!opponentSelection.opponentType) {
+        const mockEntries: GameEntry[] = currentGame.entries || [
+          {
+            id: 1,
+            user_id: currentGame.creator_id,
+            game_id: currentGame.id,
+            stake_amount: currentGame.stake_amount,
+            joined_at: new Date().toISOString(),
+            result: null,
+            payout_amount: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            username: authState.user?.username || 'Player 1',
+            user: authState.user
+          }
+        ];
+
+        setGameState((prev: PoolGameState) => ({
+          ...prev,
+          status: 'ready',
+          players: mockEntries.map(entry => ({
+            id: entry.user_id,
+            username: entry.username || `Player ${entry.user_id}`,
+            isCurrentUser: entry.user_id === authState.user?.id,
+            userId: entry.user_id
+          }))
+        }));
+      }
     };
 
     initializeGame();
@@ -95,20 +199,47 @@ const PoolGame: React.FC = () => {
         phaserGameRef.current = null;
       }
     };
-  }, [currentGame, authState.user]);
+  }, [currentGame, authState.user, opponentSelection.opponentType]);
 
   // Start the Phaser game
   const startPhaserGame = () => {
     if (!gameRef.current || !currentGame) return;
 
+    // Show opponent selection screen first
+    setOpponentSelection(prev => ({ ...prev, show: true }));
+  };
+
+  // Actually start the game after opponent selection
+  const startGameWithOpponent = () => {
+    if (!gameRef.current || !currentGame) return;
+
     setGameStarted(true);
     setGameState(prev => ({ ...prev, status: 'in_progress' }));
 
+    // WebGL context validation before game creation
+    console.log('[WebGL Debug] Checking WebGL support...');
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    if (!gl) {
+      console.error('[WebGL Debug] WebGL not supported in browser');
+      alert('WebGL is not supported in your browser. Please use a modern browser like Chrome, Firefox, or Edge.');
+      return;
+    }
+    console.log('[WebGL Debug] WebGL supported:', gl.constructor.name);
+
+    // Check for context restoration issues
+    const gameContainer = gameRef.current;
+    if (!gameContainer) {
+      console.error('[WebGL Debug] Game container not found');
+      return;
+    }
+    console.log('[WebGL Debug] Game container dimensions:', gameContainer.clientWidth, 'x', gameContainer.clientHeight);
+
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: gameRef.current.clientWidth,
-      height: gameRef.current.clientHeight,
-      parent: gameRef.current,
+      width: gameContainer.clientWidth,
+      height: gameContainer.clientHeight,
+      parent: gameContainer,
       backgroundColor: '#1a1a2e',
       physics: {
         default: 'matter',
@@ -120,7 +251,26 @@ const PoolGame: React.FC = () => {
       scene: [PoolGameScene]
     };
 
+    console.log('[WebGL Debug] Creating Phaser game with config:', {
+      type: Phaser.AUTO,
+      width: config.width,
+      height: config.height
+    });
+
     phaserGameRef.current = new Phaser.Game(config);
+
+    // Add WebGL context loss/restoration handlers
+    const canvasElement = gameContainer.querySelector('canvas');
+    if (canvasElement) {
+      canvasElement.addEventListener('webglcontextlost', (event) => {
+        console.error('[WebGL Debug] Context lost event detected');
+        event.preventDefault();
+      });
+
+      canvasElement.addEventListener('webglcontextrestored', () => {
+        console.log('[WebGL Debug] Context restored event detected');
+      });
+    }
 
     if (phaserGameRef.current && phaserGameRef.current.scene.scenes.length > 0) {
       const scene = phaserGameRef.current.scene.scenes[0] as any;
@@ -128,7 +278,8 @@ const PoolGame: React.FC = () => {
         gameId: currentGame.id,
         players: gameState.players,
         currentUserId: authState.user?.id,
-        gameType: currentGame.game_type
+        gameType: currentGame.game_type,
+        aiDifficulty: opponentSelection.difficulty
       };
     }
   };
@@ -141,6 +292,70 @@ const PoolGame: React.FC = () => {
 
   const handlePause = () => {
     console.log('Game paused');
+  };
+
+  const handleOpponentSelection = (opponentType: 'human' | 'ai', difficulty: 'easy' | 'medium' | 'hard' | null = null) => {
+    if (!currentGame) return;
+
+    setOpponentSelection({
+      show: false,
+      opponentType,
+      difficulty
+    });
+
+    // Initialize game with selected opponent
+    const mockEntries: GameEntry[] = currentGame.entries || [
+      {
+        id: 1,
+        user_id: currentGame.creator_id,
+        game_id: currentGame.id,
+        stake_amount: currentGame.stake_amount,
+        joined_at: new Date().toISOString(),
+        result: null,
+        payout_amount: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        username: authState.user?.username || 'Player 1',
+        user: authState.user
+      }
+    ];
+
+    if (opponentType === 'ai') {
+      mockEntries.push({
+        id: 2,
+        user_id: 999,
+        game_id: currentGame.id,
+        stake_amount: currentGame.stake_amount,
+        joined_at: new Date().toISOString(),
+        result: null,
+        payout_amount: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        username: `AI ${difficulty?.charAt(0).toUpperCase()}${difficulty?.slice(1)}`,
+        user: {
+          id: 999,
+          username: `AI ${difficulty?.charAt(0).toUpperCase()}${difficulty?.slice(1)}`,
+          phone_number: '0000000000',
+          is_admin: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        } as User
+      });
+    }
+
+    setGameState((prev: PoolGameState) => ({
+      ...prev,
+      status: 'ready',
+      players: mockEntries.map(entry => ({
+        id: entry.user_id,
+        username: entry.username || `Player ${entry.user_id}`,
+        isCurrentUser: entry.user_id === authState.user?.id,
+        userId: entry.user_id
+      }))
+    }));
+
+    // Start the game after opponent selection
+    setTimeout(() => startGameWithOpponent(), 100);
   };
 
   if (loading) {
@@ -171,8 +386,139 @@ const PoolGame: React.FC = () => {
         className="w-full h-screen relative"
         style={{ backgroundColor: '#1a1a2e' }}
       >
+        {/* Opponent Selection Overlay */}
+        {opponentSelection.show && (
+          <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+            <div className="bg-gradient-to-br from-blue-900 to-blue-700 rounded-xl p-8 text-center max-w-md border-2 border-yellow-500 shadow-2xl">
+              <h3 className="text-3xl font-bold text-yellow-400 mb-2">🎱 Choose Your Opponent</h3>
+              
+              {/* Game Code Display */}
+              <div className="bg-gray-800 rounded-lg p-3 mb-4">
+                <p className="text-gray-300 text-xs">Game Code</p>
+                <p className="text-2xl font-mono font-bold text-yellow-400">{currentGame?.game_code}</p>
+                <p className="text-gray-400 text-xs mt-1">Share this code for others to join</p>
+              </div>
+
+              <div className="space-y-4">
+                {/* AI Opponent Selection */}
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-xl font-semibold text-white mb-3">🤖 Play vs AI</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      className="px-3 py-2 bg-green-600 hover:bg-green-500 text-white font-bold rounded transition-all text-sm"
+                      onClick={() => handleOpponentSelection('ai', 'easy')}
+                    >
+                      Easy
+                    </button>
+                    <button
+                      className="px-3 py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded transition-all text-sm"
+                      onClick={() => handleOpponentSelection('ai', 'medium')}
+                    >
+                      Medium
+                    </button>
+                    <button
+                      className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded transition-all text-sm"
+                      onClick={() => handleOpponentSelection('ai', 'hard')}
+                    >
+                      Hard
+                    </button>
+                  </div>
+                  <p className="text-gray-400 text-xs mt-2">Play immediately against the computer</p>
+                </div>
+
+                {/* Human Opponent Option */}
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-xl font-semibold text-white mb-3">👥 Play vs Human</h4>
+                  {playerCount < 2 ? (
+                    <>
+                      <p className="text-gray-300 text-sm mb-3">
+                        Waiting for another player to join...
+                      </p>
+                      <div className="bg-purple-900/50 rounded-lg p-3 mb-3">
+                        <p className="text-purple-300 text-xs mb-1">Players joined:</p>
+                        <p className="text-white font-medium">
+                          {playerCount}/2
+                        </p>
+                      </div>
+                      <button
+                        className="w-full px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded transition-all disabled:opacity-50"
+                        disabled={true}
+                      >
+                        Waiting for opponent...
+                      </button>
+                      
+                      {/* Quick Join by Code */}
+                      <div className="mt-4 pt-4 border-t border-gray-700">
+                        <p className="text-gray-400 text-xs mb-2">Have a game code? Enter it to join:</p>
+                        <div className="flex space-x-2">
+                          <input
+                            type="text"
+                            id="join-game-code"
+                            placeholder="Enter code"
+                            className="flex-1 px-3 py-2 bg-gray-700 text-white rounded text-sm border border-gray-600 focus:outline-none focus:border-purple-500"
+                          />
+                          <button
+                            className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white font-bold rounded transition-all text-sm"
+                            onClick={() => {
+                              const codeInput = document.getElementById('join-game-code') as HTMLInputElement;
+                              const code = codeInput?.value.trim();
+                              if (code) {
+                                // Try to find and join game by code
+                                apiClient.get(`/games/${code}`)
+                                  .then(response => {
+                                    const game = response.data.game;
+                                    if (game && game.status === 'waiting') {
+                                      navigate(`/games/${game.id}/play`);
+                                    } else {
+                                      alert('Game not found or already in progress');
+                                    }
+                                  })
+                                  .catch(() => alert('Game not found'));
+                              }
+                            }}
+                          >
+                            Join
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <button
+                        className="w-full mt-4 px-6 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded transition-all"
+                        onClick={() => {
+                          if (window.confirm('Cancel this game and return to lobby?')) {
+                            navigate('/games');
+                          }
+                        }}
+                      >
+                        Cancel Game
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-green-400 text-sm mb-3">✓ Opponent joined! Ready to play!</p>
+                      <button
+                        className="w-full px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded transition-all"
+                        onClick={() => handleOpponentSelection('human', null)}
+                      >
+                        Start Game vs Human
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <button
+                className="mt-6 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded transition-all"
+                onClick={() => setOpponentSelection(prev => ({ ...prev, show: false }))}
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Game Instructions Overlay */}
-        {!gameStarted && gameState.status === 'ready' && (
+        {!gameStarted && gameState.status === 'ready' && !opponentSelection.show && (
           <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
             <div className="bg-gradient-to-br from-green-900 to-green-700 rounded-xl p-8 text-center max-w-lg border-2 border-yellow-500 shadow-2xl">
               <h3 className="text-3xl font-bold text-yellow-400 mb-4">🎱 8-Ball Pool</h3>
@@ -249,7 +595,7 @@ class PoolGameScene extends Phaser.Scene {
   private powerIndicator: Phaser.GameObjects.Graphics | null = null;
   private isAiming = false;
   private shotPower = 0;
-  private maxPower = 150;
+  private maxPower = 250; // Increased from 150 for more power
   private currentPlayerTurn = 0;
   private gameStarted = false;
   private gameOver = false;
@@ -278,6 +624,9 @@ class PoolGameScene extends Phaser.Scene {
   private STOP_THRESHOLD = 0.05;
   private inputListenersRegistered = false;
   private canShoot = true;
+  private isAIPlayer = false;
+  private aiThinking = false;
+  private aiDifficulty: 'easy' | 'medium' | 'hard' = 'medium';
 
   constructor() {
     super({ key: 'PoolGameScene' });
@@ -292,6 +641,9 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   create() {
+    // Pre-generate all textures before creating game objects
+    this.pregenerateBallTextures();
+    
     this.createRealisticPoolTable();
     this.createRealisticPockets();
     this.createBalls();
@@ -315,6 +667,28 @@ class PoolGameScene extends Phaser.Scene {
     this.gameStarted = true;
     this.gameType = 'break';
     this.updateMessage('Break Shot!');
+    
+    console.log('[Pool Game] Scene created, textures pre-generated');
+  }
+
+  shutdown() {
+    // Clean up all textures to prevent memory leaks
+    console.log('[Pool Game] Cleaning up textures...');
+    
+    const textureKeys = [
+      'ball_0_cue', 'ball_1_regular', 'ball_2_regular', 'ball_3_regular',
+      'ball_4_regular', 'ball_5_regular', 'ball_6_regular', 'ball_7_regular',
+      'ball_8_regular', 'ball_9_regular', 'ball_10_regular', 'ball_11_regular',
+      'ball_12_regular', 'ball_13_regular', 'ball_14_regular', 'ball_15_regular',
+      'cue_stick_static'
+    ];
+    
+    textureKeys.forEach(key => {
+      if (this.textures.exists(key)) {
+        this.textures.remove(key);
+        console.log(`[Texture Cleanup] Removed: ${key}`);
+      }
+    });
   }
 
   private createRealisticPoolTable() {
@@ -460,7 +834,7 @@ class PoolGameScene extends Phaser.Scene {
 
   private createRealisticPockets() {
     const { feltLeft, feltRight, feltTop, feltBottom } = this.tableBounds;
-    
+
     // 6 pocket positions with realistic dimensions
     this.pocketPositions = [
       { x: feltLeft + 15, y: feltTop + 15 },      // Top-left corner
@@ -476,25 +850,25 @@ class PoolGameScene extends Phaser.Scene {
     this.pocketPositions.forEach((pos, index) => {
       const pocket = this.add.graphics();
       const radius = pocketRadii[index];
-      
+
       // Pocket shadow/bezel with 3D effect
       pocket.fillStyle(0x1a1a1a, 1);
       pocket.fillCircle(pos.x, pos.y, radius + 6);
-      
+
       // Pocket interior with depth
       pocket.fillStyle(0x0a0a0a, 1);
       pocket.fillCircle(pos.x, pos.y, radius + 2);
-      
+
       // Inner depth/shadow
       pocket.fillStyle(0x000000, 1);
       pocket.fillCircle(pos.x, pos.y, radius - 2);
-      
+
       // Pocket lining
       pocket.lineStyle(2, 0x333333, 1);
       pocket.strokeCircle(pos.x, pos.y, radius + 2);
-      
-      // Physics sensor with smaller radius for realistic pocketing
-      this.matter.add.circle(pos.x, pos.y, radius * 0.65, {
+
+      // Physics sensor with larger radius for more reliable pocketing
+      this.matter.add.circle(pos.x, pos.y, radius * 0.8, {
         isSensor: true,
         label: `pocket-${index}`,
         collisionFilter: { category: 0x0002, mask: 0x0001 }
@@ -531,10 +905,10 @@ class PoolGameScene extends Phaser.Scene {
     
     const rackPositions = this.getRackPositions(rackX, rackY, ballRadius);
     
-    rackOrder.forEach((number, index) => {
+    rackOrder.forEach((number, idx) => {
       const ball = this.createBallTexture(
-        rackPositions[index].x,
-        rackPositions[index].y,
+        rackPositions[idx].x,
+        rackPositions[idx].y,
         ballColors[number],
         number > 8,
         number,
@@ -550,90 +924,136 @@ class PoolGameScene extends Phaser.Scene {
     });
   }
 
-  private createBallTexture(x: number, y: number, color: number, isStripe: boolean, number: number, isCue: boolean): Phaser.Physics.Matter.Sprite {
+  // Pre-generate ball textures to avoid WebGL memory leaks
+  private pregenerateBallTextures(): void {
     const ballRadius = 18;
-    const graphics = this.add.graphics();
     const textureWidth = ballRadius * 2 + 4;
     const textureHeight = ballRadius * 2 + 4;
+
+    // Define all ball configurations
+    const ballConfigs = [
+      { number: 0, color: 0xffffff, isStripe: false, isCue: true },
+      { number: 1, color: 0xffd700, isStripe: false, isCue: false },
+      { number: 2, color: 0x0000ff, isStripe: false, isCue: false },
+      { number: 3, color: 0xff0000, isStripe: false, isCue: false },
+      { number: 4, color: 0x800080, isStripe: false, isCue: false },
+      { number: 5, color: 0xff6600, isStripe: false, isCue: false },
+      { number: 6, color: 0x008000, isStripe: false, isCue: false },
+      { number: 7, color: 0x800000, isStripe: false, isCue: false },
+      { number: 8, color: 0x000000, isStripe: false, isCue: false },
+      { number: 9, color: 0xffd700, isStripe: true, isCue: false },
+      { number: 10, color: 0x0000ff, isStripe: true, isCue: false },
+      { number: 11, color: 0xff0000, isStripe: true, isCue: false },
+      { number: 12, color: 0x800080, isStripe: true, isCue: false },
+      { number: 13, color: 0xff6600, isStripe: true, isCue: false },
+      { number: 14, color: 0x008000, isStripe: true, isCue: false },
+      { number: 15, color: 0x800000, isStripe: true, isCue: false }
+    ];
+
+    ballConfigs.forEach(config => {
+      const textureKey = `ball_${config.number}_${config.isCue ? 'cue' : 'regular'}`;
+      
+      // Skip if texture already exists
+      if (this.textures.exists(textureKey)) {
+        console.log(`[Texture Debug] Texture ${textureKey} already exists, skipping`);
+        return;
+      }
+
+      const graphics = this.add.graphics();
+      
+      // Shadow under ball
+      graphics.fillStyle(0x000000, 0.3);
+      graphics.fillCircle(ballRadius + 1, ballRadius + 1, ballRadius);
+      
+      // Ball base color
+      graphics.fillStyle(config.color, 1);
+      graphics.fillCircle(ballRadius, ballRadius, ballRadius);
+      
+      // Add subtle gradient effect with concentric circles
+      for (let i = 5; i > 0; i--) {
+        const ratio = i / 5;
+        const stepColor = Phaser.Display.Color.ValueToColor(config.color).lighten(ratio * 12).color;
+        graphics.fillStyle(stepColor, 0.3);
+        graphics.fillCircle(ballRadius - 2, ballRadius - 2, ballRadius * ratio);
+      }
+      
+      // Stripe for striped balls (wide white band)
+      if (config.isStripe) {
+        graphics.fillStyle(0xffffff, 1);
+        graphics.fillRect(ballRadius - ballRadius + 2, ballRadius - 10, ballRadius * 2 - 4, 20);
+      }
+      
+      // 8-ball special design - white circle
+      if (config.number === 8) {
+        graphics.fillStyle(0xffffff, 1);
+        graphics.fillCircle(ballRadius, ballRadius, ballRadius * 0.48);
+        graphics.lineStyle(1.5, 0xdddddd, 1);
+        graphics.strokeCircle(ballRadius, ballRadius, ballRadius * 0.48);
+      }
+      
+      // White circle for number (except cue ball)
+      if (config.number !== 0) {
+        graphics.fillStyle(0xffffff, 0.95);
+        graphics.fillCircle(ballRadius, ballRadius, ballRadius * 0.4);
+      }
+      
+      // Add number using graphics circles to create digits
+      if (config.number !== 0) {
+        this.drawNumberOnBallImproved(graphics, ballRadius, config.number, config.isStripe);
+      }
+      
+      // Add 3D highlight effect (shiny reflection)
+      graphics.fillStyle(0xffffff, 0.8);
+      graphics.fillCircle(ballRadius - 7, ballRadius - 7, ballRadius * 0.25);
+      graphics.fillStyle(0xffffff, 0.4);
+      graphics.fillCircle(ballRadius - 7, ballRadius - 7, ballRadius * 0.4);
+      
+      // Darker edge for definition
+      graphics.lineStyle(1, 0x000000, 0.25);
+      graphics.strokeCircle(ballRadius, ballRadius, ballRadius);
+      
+      // Generate texture with static key
+      graphics.generateTexture(textureKey, textureWidth, textureHeight);
+      graphics.destroy();
+      
+      console.log(`[Texture Debug] Created texture: ${textureKey}`);
+    });
+  }
+
+  private createBallTexture(x: number, y: number, color: number, isStripe: boolean, number: number, isCue: boolean): Phaser.Physics.Matter.Sprite {
+    const ballRadius = 18;
     
-    // Shadow under ball
-    graphics.fillStyle(0x000000, 0.3);
-    graphics.fillCircle(ballRadius + 1, ballRadius + 1, ballRadius);
-    
-    // Ball base color
-    graphics.fillStyle(color, 1);
-    graphics.fillCircle(ballRadius, ballRadius, ballRadius);
-    
-    // Add subtle gradient effect with concentric circles
-    for (let i = 5; i > 0; i--) {
-      const ratio = i / 5;
-      const stepColor = Phaser.Display.Color.ValueToColor(color).lighten(ratio * 12).color;
-      graphics.fillStyle(stepColor, 0.3);
-      graphics.fillCircle(ballRadius - 2, ballRadius - 2, ballRadius * ratio);
-    }
-    
-    // Stripe for striped balls (wide white band)
-    if (isStripe) {
-      graphics.fillStyle(0xffffff, 1);
-      graphics.fillRect(ballRadius - ballRadius + 2, ballRadius - 10, ballRadius * 2 - 4, 20);
-    }
-    
-    // 8-ball special design - white circle
-    if (number === 8) {
-      graphics.fillStyle(0xffffff, 1);
-      graphics.fillCircle(ballRadius, ballRadius, ballRadius * 0.48);
-      graphics.lineStyle(1.5, 0xdddddd, 1);
-      graphics.strokeCircle(ballRadius, ballRadius, ballRadius * 0.48);
-    }
-    
-    // White circle for number (except cue ball)
-    if (number !== 0) {
-      graphics.fillStyle(0xffffff, 0.95);
-      graphics.fillCircle(ballRadius, ballRadius, ballRadius * 0.4);
-    }
-    
-    // Add number using graphics circles to create digits
-    if (number !== 0) {
-      this.drawNumberOnBall(graphics, ballRadius, number, isStripe);
-    }
-    
-    // Add 3D highlight effect (shiny reflection)
-    graphics.fillStyle(0xffffff, 0.8);
-    graphics.fillCircle(ballRadius - 7, ballRadius - 7, ballRadius * 0.25);
-    graphics.fillStyle(0xffffff, 0.4);
-    graphics.fillCircle(ballRadius - 7, ballRadius - 7, ballRadius * 0.4);
-    
-    // Darker edge for definition
-    graphics.lineStyle(1, 0x000000, 0.25);
-    graphics.strokeCircle(ballRadius, ballRadius, ballRadius);
-    
-    // Generate texture
-    const textureKey = `ball_${number}_${Date.now()}_${Math.random()}`;
-    graphics.generateTexture(textureKey, textureWidth, textureHeight);
-    graphics.destroy();
+    // Use pre-generated texture with static key
+    const textureKey = `ball_${number}_${isCue ? 'cue' : 'regular'}`;
     
     const ball = this.matter.add.image(x, y, textureKey) as Phaser.Physics.Matter.Sprite;
     ball.setCircle(ballRadius);
-    ball.setFriction(0.02);
-    ball.setFrictionAir(0.015);
-    ball.setBounce(0.75);
+    ball.setFriction(0.01); // Reduced from 0.02 for less drag
+    ball.setFrictionAir(0.008); // Reduced from 0.015 for balls that travel further
+    ball.setBounce(0.85); // Increased from 0.75 for more energetic collisions
     ball.setMass(1);
     ball.setCollisionCategory(0x0001);
     ball.setCollidesWith(0x0001);
     
+    // Add special visual indicator for cue ball
+    if (isCue) {
+      // Cue ball gets a slightly different highlight
+      ball.setData('isCue', true);
+    }
+    
     return ball;
   }
 
-  private drawNumberOnBall(graphics: Phaser.GameObjects.Graphics, centerX: number, number: number, isStripe: boolean) {
+  private drawNumberOnBallImproved(graphics: Phaser.GameObjects.Graphics, centerX: number, number: number, isStripe: boolean) {
     const textColor = isStripe ? 0x000000 : 0x000000;
-    const digitScale = 8;
+    const digitScale = 10;
     const offsetX = centerX;
     const offsetY = centerX;
-    
+
     // Draw each digit using circles
     const digits = number.toString().split('').map(d => parseInt(d));
     let startX = offsetX - ((digits.length - 1) * digitScale) / 2;
-    
+
     digits.forEach((digit, index) => {
       const x = startX + index * digitScale * 2;
       this.drawDigit(graphics, x, offsetY, digit, textColor, digitScale);
@@ -641,9 +1061,6 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private drawDigit(graphics: Phaser.GameObjects.Graphics, x: number, y: number, digit: number, color: number, scale: number) {
-    const half = scale / 2;
-    const third = scale / 3;
-    
     // Standard 7-segment style using circles
     const segments = this.getDigitSegments(digit);
     
@@ -655,8 +1072,6 @@ class PoolGameScene extends Phaser.Scene {
 
   private getDigitSegments(digit: number): [number, number, number][] {
     // Define segments for each digit (relative positions and radius)
-    const s: [number, number, number][] = [];
-    
     switch(digit) {
       case 0:
         return [[-1, -1, 2.5], [1, -1, 2.5], [-1, 1, 2.5], [1, 1, 2.5]];
@@ -685,7 +1100,8 @@ class PoolGameScene extends Phaser.Scene {
 
   private drawSmallNumberOnBall(graphics: Phaser.GameObjects.Graphics, centerX: number, centerY: number, number: number, radius: number) {
     const textColor = 0xffffff;
-    const digitScale = 3;
+    // Use the radius parameter to scale the digit size appropriately
+    const digitScale = Math.max(2, radius * 0.8);
     const offsetX = centerX;
     const offsetY = centerY;
     
@@ -781,21 +1197,21 @@ class PoolGameScene extends Phaser.Scene {
 
   private createPortedBallsDisplay() {
     this.pocketedBallsDisplay = this.add.container(this.scale.width / 2, 25);
-    
+
     // Create a realistic ball rack display
     const bg = this.add.graphics();
     bg.fillStyle(0x2d1f0f, 1); // Wood color
     bg.fillRoundedRect(-120, -10, 240, 60, 12);
-    
+
     // Wood grain effect
     bg.lineStyle(1, 0x3d2a15, 0.8);
     for (let i = 0; i < 8; i++) {
       const y = -8 + i * 7;
       bg.lineBetween(-115, y, 115, y + (i % 2 === 0 ? 2 : -2));
     }
-    
+
     this.pocketedBallsDisplay.add(bg);
-    
+
     // Title
     const title = this.add.text(0, -20, 'POCKETED BALLS', {
       fontSize: '12px',
@@ -803,29 +1219,29 @@ class PoolGameScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5);
     this.pocketedBallsDisplay.add(title);
-    
+
     // Create placeholder slots for all balls
     const ballsContainer = this.add.container(0, 0);
     this.pocketedBallsDisplay.add(ballsContainer);
-    
+
     // Create 15 placeholder slots (1-15)
     const ballRadius = 8;
     const spacing = 16;
     const startX = -((15 - 1) * spacing) / 2;
-    
+
     for (let i = 1; i <= 15; i++) {
       const x = startX + (i - 1) * spacing;
-      
+
       // Placeholder slot
       const slot = this.add.graphics();
       slot.lineStyle(1, 0x8b7355, 0.5); // Bronze color
       slot.strokeCircle(x, 0, ballRadius + 1);
       slot.lineStyle(1, 0x5a4025, 0.3);
       slot.strokeCircle(x, 0, ballRadius + 3);
-      
+
       ballsContainer.add(slot);
     }
-    
+
     (this.pocketedBallsDisplay as any).ballsContainer = ballsContainer;
     this.pocketedBallsDisplay.setDepth(100);
   }
@@ -844,7 +1260,7 @@ class PoolGameScene extends Phaser.Scene {
     });
     
     // Add pocketed balls to their correct positions
-    this.pocketedBalls.forEach((ball, index) => {
+    this.pocketedBalls.forEach((ball) => {
       const ballNumber = ball.number;
       const ballRadius = 8;
       const spacing = 16;
@@ -922,7 +1338,8 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private handleBallCollisions(event: any) {
-    if (this.gameType !== 'eightball' || this.gameOver) return;
+    // During break shot, no foul detection for first ball hit
+    if (this.gameType === 'break' || this.gameOver) return;
     
     event.pairs.forEach((pair: any) => {
       const { bodyA, bodyB } = pair;
@@ -943,32 +1360,34 @@ class PoolGameScene extends Phaser.Scene {
   }
 
   private checkFouls(hitBall: Phaser.Physics.Matter.Sprite) {
-    if (!this.currentPlayerGroup || this.gameOver) return;
+    // No foul checking during break or if no group assigned yet
+    if (this.gameType === 'break' || !this.currentPlayerGroup || this.gameOver) return;
     
     const ballType = hitBall.getData('type');
     const ballNumber = hitBall.getData('number');
-    const currentPlayer = this.currentPlayerTurn;
-    const opponentPlayer = (currentPlayer + 1) % 2;
     
     // Check for fouls
     const fouls: string[] = [];
     
-    // 1. Hitting opponent's ball first
+    // 1. Hitting opponent's ball first (not on 8-ball)
     if (ballType !== 'cue' && ballType !== 'eight') {
       const isOpponentBall = (this.currentPlayerGroup === 'solid' && ballType === 'stripe') ||
                             (this.currentPlayerGroup === 'stripe' && ballType === 'solid');
       
       if (isOpponentBall) {
+        console.log(`[FOUL DETECTION] Player ${this.currentPlayerTurn + 1} hit opponent's ${ballType} ball first`);
         fouls.push('opponent_ball_first');
       }
     }
     
-    // 2. Hitting black ball first (before clearing group)
-    if (ballNumber === 8 && this.ballsRemaining.solid > 0 && this.ballsRemaining.stripe > 0) {
-      fouls.push('black_ball_first');
+    // 2. Hitting 8-ball first before clearing group (unless it's the only ball left)
+    if (ballNumber === 8) {
+      const myBallsRemaining = this.currentPlayerGroup === 'solid' ? this.ballsRemaining.solid : this.ballsRemaining.stripe;
+      if (myBallsRemaining > 0) {
+        console.log(`[FOUL DETECTION] Player ${this.currentPlayerTurn + 1} hit 8-ball before clearing group (${myBallsRemaining} balls remaining)`);
+        fouls.push('hit_8ball_early');
+      }
     }
-    
-    // 3. No ball hit at all (handled separately when turn ends)
     
     if (fouls.length > 0) {
       this.foulsThisTurn.push(...fouls);
@@ -978,17 +1397,23 @@ class PoolGameScene extends Phaser.Scene {
 
   private handleFoul(fouls: string[]) {
     const foulMessages: Record<string, string> = {
-      'opponent_ball_first': 'Foul! Hit opponent\'s ball first',
-      'black_ball_first': 'Foul! Hit black ball before clearing group'
+      'opponent_ball_first': 'FOUL! Hit opponent\'s ball first!',
+      'hit_8ball_early': 'FOUL! Hit 8-ball too early!',
+      'no_ball_hit': 'FOUL! No ball hit!',
+      'cue_pocketed': 'FOUL! Scratch!'
     };
     
+    console.log(`[FOUL HANDLING] Processing ${fouls.length} foul(s) for player ${this.currentPlayerTurn + 1}`);
+    
     fouls.forEach(foul => {
-      this.updateMessage(foulMessages[foul] || 'Foul!');
-      
-      // Give opponent 2 extra shots
-      this.extraShotsRemaining = 2;
-      this.updateTurnIndicator();
+      this.updateMessage(foulMessages[foul] || 'FOUL!');
+      console.log(`[FOUL] ${foulMessages[foul] || foul}`);
     });
+    
+    // Give opponent ball-in-hand (extra shot)
+    this.extraShotsRemaining = 1;
+    this.updateTurnIndicator();
+    this.updatePlayerBallRacks();
   }
 
   private createPlayerBallRacks() {
@@ -1127,35 +1552,35 @@ class PoolGameScene extends Phaser.Scene {
   private handlePocketCollision(body: any) {
     const ball = body.gameObject;
     if (!ball || !ball.active) return;
-    
+
     const ballType = ball.getData('type');
     const ballNumber = ball.getData('number');
-    
+
     // Cue ball pocketed
     if (ballType === 'cue') {
       this.handleCueBallPocketed(ball);
       return;
     }
-    
+
     // Mark ball as pocketed
     ball.setData('pocketed', true);
     ball.setActive(false);
     ball.setVisible(false);
     ball.setVelocity(0, 0);
-    
+
     // Track pocketed ball
     this.ballsPocketedThisTurn.push({ number: ballNumber, type: ballType });
     this.pocketedBalls.push({ number: ballNumber, type: ballType, player: this.currentPlayerTurn });
     this.updatePortedBallsDisplay();
     this.updatePlayerBallRacks();
-    
+
     // Update remaining balls
     if (ballType === 'solid') this.ballsRemaining.solid--;
     if (ballType === 'stripe') this.ballsRemaining.stripe--;
-    
+
     // 8-ball pocketed
     if (ballType === 'eight') {
-      this.handleEightBallPocketed(ball);
+      this.handleEightBallPocketed();
     }
   }
 
@@ -1174,20 +1599,35 @@ class PoolGameScene extends Phaser.Scene {
     });
   }
 
-  private handleEightBallPocketed(ball: Phaser.Physics.Matter.Sprite) {
+  private handleEightBallPocketed() {
+    // Check if this was a valid 8-ball shot
     const currentGroup = this.currentPlayerGroup;
     const canPocketEight = currentGroup && (
       (currentGroup === 'solid' && this.ballsRemaining.solid === 0) ||
       (currentGroup === 'stripe' && this.ballsRemaining.stripe === 0)
     );
     
-    if (canPocketEight && this.ballsPocketedThisTurn.length > 0) {
-      // Win!
-      this.endGame(this.currentPlayerTurn, 'win');
-    } else {
-      // Lose!
-      this.endGame(this.currentPlayerTurn, 'lose');
+    console.log(`[8-BALL] Player ${this.currentPlayerTurn + 1} pocketed 8-ball`);
+    console.log(`[8-BALL] Current group: ${currentGroup}, Can pocket: ${canPocketEight}`);
+    console.log(`[8-BALL] Balls remaining - solids: ${this.ballsRemaining.solid}, stripes: ${this.ballsRemaining.stripe}`);
+    
+    if (canPocketEight) {
+      // Win! - Only if player hit their ball first (checked via firstBallHit)
+      if (this.firstBallHit) {
+        const firstBallType = this.firstBallHit.getData('type');
+        if (firstBallType === currentGroup) {
+          console.log(`[8-BALL] VALID WIN - Player ${this.currentPlayerTurn + 1} wins!`);
+          this.endGame(this.currentPlayerTurn, 'win');
+          return;
+        }
+      }
+      // If no first ball hit or wrong ball hit, it's a foul and loss
+      console.log(`[8-BALL] FOUL - No legal ball hit first or wrong ball hit`);
     }
+    
+    // Lose! - Early 8-ball or foul on 8-ball
+    console.log(`[8-BALL] LOSS - Player ${this.currentPlayerTurn + 1} loses!`);
+    this.endGame(this.currentPlayerTurn, 'lose');
   }
 
   private placeCueBallInHand() {
@@ -1245,12 +1685,62 @@ class PoolGameScene extends Phaser.Scene {
     }
   }
 
+  // Pre-generate cue stick texture once
+  private pregenerateCueTexture(): void {
+    const textureKey = 'cue_stick_static';
+    
+    if (this.textures.exists(textureKey)) {
+      return;
+    }
+
+    const cueGraphics = this.add.graphics();
+    const cueLength = 300;
+    const cueWidth = 6;
+    
+    // Cue stick shaft (wood color gradient)
+    cueGraphics.fillStyle(0x8B4513, 1);
+    cueGraphics.fillRoundedRect(0, -cueWidth / 2, cueLength, cueWidth, 3);
+    
+    // Cue stick tip (white)
+    cueGraphics.fillStyle(0xFFFFFF, 1);
+    cueGraphics.fillRect(0, -cueWidth / 2, 8, cueWidth);
+    
+    // Generate texture with static key
+    cueGraphics.generateTexture(textureKey, cueLength, cueWidth);
+    cueGraphics.destroy();
+    
+    console.log('[Texture Debug] Created cue stick texture');
+  }
+
   private createCueGraphics(pointer: Phaser.Input.Pointer) {
     if (!this.cueBall) return;
+    
+    // Pre-generate cue texture once
+    this.pregenerateCueTexture();
     
     // Aiming line
     this.cue = this.add.line(0, 0, 0, 0, 0, 0, 0xffff00, 1);
     this.cue.setLineWidth(2);
+    
+    // Use pre-generated texture with static key
+    const cueTextureKey = 'cue_stick_static';
+    
+    // Create sprite for cue stick
+    this.cueStick = this.add.image(this.cueBall.x, this.cueBall.y, cueTextureKey);
+    this.cueStick.setOrigin(1, 0.5);
+    this.cueStick.setDepth(10);
+    
+    // Position cue stick behind cue ball based on current angle
+    const angle = Phaser.Math.Angle.Between(
+      this.cueBall.x, this.cueBall.y,
+      pointer.worldX, pointer.worldY
+    );
+    
+    // Position cue stick opposite to aim direction (behind the ball)
+    const cueOffset = 40;
+    this.cueStick.x = this.cueBall.x - Math.cos(angle) * cueOffset;
+    this.cueStick.y = this.cueBall.y - Math.sin(angle) * cueOffset;
+    this.cueStick.rotation = angle;
     
     // Power indicator
     this.powerIndicator = this.add.graphics();
@@ -1271,6 +1761,14 @@ class PoolGameScene extends Phaser.Scene {
         this.cueBall.x + Math.cos(angle) * 200,
         this.cueBall.y + Math.sin(angle) * 200
       );
+    }
+    
+    // Update cue stick position and rotation
+    if (this.cueStick) {
+      const cueOffset = 40 + (this.shotPower / this.maxPower) * 30; // Cue moves back as power increases
+      this.cueStick.x = this.cueBall.x - Math.cos(angle) * cueOffset;
+      this.cueStick.y = this.cueBall.y - Math.sin(angle) * cueOffset;
+      this.cueStick.rotation = angle;
     }
     
     // Update power
@@ -1318,23 +1816,37 @@ class PoolGameScene extends Phaser.Scene {
       this.cue = null;
     }
     
+    if (this.cueStick) {
+      this.cueStick.destroy();
+      this.cueStick = null;
+    }
+    
     if (this.powerIndicator) {
       this.powerIndicator.destroy();
       this.powerIndicator = null;
     }
     
-    // Shoot
-    if (this.shotPower > 5) {
+    // Shoot (only if canShoot is true)
+    if (this.canShoot && this.shotPower > 5) {
       const angle = Phaser.Math.Angle.Between(
         this.cueBall.x, this.cueBall.y,
         pointer.worldX, pointer.worldY
       );
       
-      const force = this.shotPower * 0.0003;
+      const velocityMultiplier = 0.35;
+      console.log(`[SHOT] Player ${this.currentPlayerTurn + 1} shot: Power=${this.shotPower.toFixed(1)}, Angle=${(Phaser.Math.RadToDeg(angle)).toFixed(1)}°`);
       this.cueBall.setVelocity(
-        Math.cos(angle) * this.shotPower * 0.15,
-        Math.sin(angle) * this.shotPower * 0.15
+        Math.cos(angle) * this.shotPower * velocityMultiplier,
+        Math.sin(angle) * this.shotPower * velocityMultiplier
       );
+      
+      // Prevent shooting until balls stop
+      this.canShoot = false;
+    } else if (!this.canShoot) {
+      console.log(`[SHOT] Blocked - balls are still moving`);
+    } else {
+      // Shot too weak, cancel it
+      this.ballsHaveMoved = false;
     }
   }
 
@@ -1358,11 +1870,18 @@ class PoolGameScene extends Phaser.Scene {
     if (!this.gameData || !this.gameData.players) {
       return;
     }
-    
+
     const now = Date.now();
     if (now - this.lastTurnSwitchTime < 500) return;
     this.lastTurnSwitchTime = now;
-    
+
+    // Check for fouls first
+    if (this.foulsThisTurn.length > 0) {
+      console.log(`[TURN SWITCH] Fouls detected, switching turn`);
+      // Fouls are already handled in handleFoul, just clean up
+      this.foulsThisTurn = [];
+    }
+
     // End turn cleanup - always reset state
     this.turnSwitchScheduled = false;
     this.ballsHaveMoved = false;
@@ -1370,19 +1889,27 @@ class PoolGameScene extends Phaser.Scene {
     this.ballsPocketedThisTurn = [];
     this.foulsThisTurn = [];
     
-    // Handle extra shots from fouls
+    // Allow shooting for next turn
+    this.canShoot = true;
+
+    // Handle extra shots from fouls (ball-in-hand)
     if (this.extraShotsRemaining > 0) {
       this.extraShotsRemaining--;
       this.updatePlayerBallRacks();
-      this.updateMessage(`Extra shot remaining: ${this.extraShotsRemaining}`);
+      const playerName = this.gameData.players[this.currentPlayerTurn]?.username || `Player ${this.currentPlayerTurn + 1}`;
+      this.updateMessage(`${playerName} has ball-in-hand!`);
+      this.checkIfCurrentPlayerIsAI();
       return; // Continue current player's turn
     }
-    
+
     // Determine if turn continues (pocketed legal ball)
     let continueTurn = false;
+    let turnEndReason = 'switched';
+    
     if (this.ballsPocketedThisTurn.length > 0) {
       const pocketedBall = this.ballsPocketedThisTurn[0];
-      
+      console.log(`[TURN LOGIC] Pocketed ball type: ${pocketedBall.type}, number: ${pocketedBall.number}`);
+
       // After break, determine groups
       if (this.gameType === 'break') {
         if (pocketedBall.type !== 'cue') {
@@ -1390,7 +1917,7 @@ class PoolGameScene extends Phaser.Scene {
           // Determine groups based on first ball pocketed
           const solidsPocketed = this.pocketedBalls.filter(b => b.type === 'solid').length;
           const stripesPocketed = this.pocketedBalls.filter(b => b.type === 'stripe').length;
-          
+
           if (solidsPocketed > stripesPocketed) {
             this.playerGroups.player0 = 'solid';
             this.playerGroups.player1 = 'stripe';
@@ -1400,40 +1927,324 @@ class PoolGameScene extends Phaser.Scene {
             this.playerGroups.player1 = 'solid';
             this.currentPlayerGroup = this.currentPlayerTurn === 0 ? 'stripe' : 'solid';
           }
-          
+
           const currentPlayer = this.gameData.players[this.currentPlayerTurn];
           const groupName = this.currentPlayerGroup === 'solid' ? 'Solids (1-7)' : 'Stripes (9-15)';
           this.updateMessage(`${currentPlayer.username} gets ${groupName}`);
+          continueTurn = true; // Continue after break if any ball pocketed
+          turnEndReason = 'continued (break)';
         }
       } else if (this.gameType === 'eightball') {
-        // Check if pocketed ball is of player's group
+        // In 8-ball, must hit your ball first and pocket it to continue
         if (this.currentPlayerGroup && pocketedBall.type === this.currentPlayerGroup) {
+          // 8-ball handling is done in handleEightBallPocketed, so this is a legal ball
           continueTurn = true;
+          turnEndReason = 'continued (legal ball)';
+        } else {
+          turnEndReason = 'switched (wrong ball)';
         }
       }
+    } else if (!this.firstBallHit && this.gameType === 'eightball') {
+      // No balls pocketed AND no ball hit = foul (handled in update)
+      turnEndReason = 'switched (no hit)';
     }
-    
+
+    console.log(`[TURN SWITCH] Player ${this.currentPlayerTurn + 1} turn ${turnEndReason}`);
+
     if (!continueTurn) {
       this.currentPlayerTurn = (this.currentPlayerTurn + 1) % 2;
       this.currentPlayerGroup = this.playerGroups[`player${this.currentPlayerTurn}` as keyof typeof this.playerGroups] || null;
       this.extraShotsRemaining = 0; // Reset extra shots when turn changes
     }
-    
+
     this.updateTurnIndicator();
     this.updatePlayerBallRacks();
+    this.checkIfCurrentPlayerIsAI();
   }
 
   private updateTurnIndicator() {
     if (!this.turnText || !this.gameData || !this.gameData.players) return;
-    
+
     const currentPlayer = this.gameData.players[this.currentPlayerTurn];
     if (!currentPlayer) return;
-    
+
     const isCurrentUser = currentPlayer.userId === this.gameData.currentUserId;
     const extraShotsText = this.extraShotsRemaining > 0 ? ` (Extra Shots: ${this.extraShotsRemaining})` : '';
-    
+
     this.turnText.setText(`${currentPlayer.username}'s Turn${extraShotsText}`);
     this.turnText.setColor(isCurrentUser ? '#00ff00' : '#ff6600');
+  }
+
+  private checkIfCurrentPlayerIsAI() {
+    if (!this.gameData || !this.gameData.players) return;
+
+    const currentPlayer = this.gameData.players[this.currentPlayerTurn];
+    if (!currentPlayer) return;
+
+    const isCurrentUser = currentPlayer.userId === this.gameData.currentUserId;
+    this.isAIPlayer = !isCurrentUser;
+
+    if (this.isAIPlayer && !this.gameOver && this.gameStarted) {
+      this.handleAITurn();
+    } else if (!this.isAIPlayer) {
+      this.handleHumanTurn();
+    }
+  }
+
+  private handleHumanTurn() {
+    // Zoom in closer for human player
+    this.cameras.main.zoomTo(1.2, 500, 'Linear');
+    this.updateMessage('Your turn! Aim and shoot.');
+  }
+
+  private handleAITurn() {
+    if (this.aiThinking) return;
+
+    this.aiThinking = true;
+    this.updateMessage('AI is thinking...');
+
+    // Zoom out for AI turn
+    this.cameras.main.zoomTo(0.8, 500, 'Linear');
+
+    // Delay AI shot for realism
+    this.time.delayedCall(2000, () => {
+      this.executeAIShot();
+    });
+  }
+
+  private executeAIShot() {
+    if (!this.cueBall || !this.cueBall.active || this.gameOver) {
+      this.aiThinking = false;
+      return;
+    }
+
+    // Enhanced AI logic: aim at best pocket with strategic shot selection
+    const bestShot = this.findBestAIShot();
+    if (!bestShot) {
+      // If no good shot, try defensive shot, otherwise random shot
+      if (!this.executeDefensiveShot()) {
+        this.executeRandomShot();
+      }
+      return;
+    }
+
+    // Calculate shot direction with cut angle consideration
+    const angle = Phaser.Math.Angle.Between(
+      this.cueBall.x, this.cueBall.y,
+      bestShot.targetX, bestShot.targetY
+    );
+
+    // Adjust randomness and accuracy based on difficulty
+    let angleVariation = 0.3; // Default medium
+    let powerVariation = 0.4;
+    let basePower = 0.8;
+
+    switch (this.aiDifficulty) {
+      case 'easy':
+        angleVariation = 0.6; // More random
+        powerVariation = 0.6;
+        basePower = 0.6;
+        break;
+      case 'hard':
+        angleVariation = 0.08; // More accurate
+        powerVariation = 0.15;
+        basePower = 0.95;
+        break;
+      case 'medium':
+      default:
+        // Keep default values
+        break;
+    }
+
+    // Add randomness based on difficulty
+    const randomAngle = angle + (Math.random() - 0.5) * angleVariation;
+    const power = Math.min(basePower + Math.random() * powerVariation, 1.0);
+    const aiVelocityMultiplier = 0.35; // Increased from 0.15 for more power
+
+    // Execute the shot
+    console.log(`[AI SHOT DEBUG] Difficulty: ${this.aiDifficulty}, Power: ${power.toFixed(2)}, Velocity: ${(power * aiVelocityMultiplier * 150).toFixed(1)}`);
+    this.cueBall.setVelocity(
+      Math.cos(randomAngle) * power * aiVelocityMultiplier * 150,
+      Math.sin(randomAngle) * power * aiVelocityMultiplier * 150
+    );
+
+    this.updateMessage(`AI (${this.aiDifficulty}) ${bestShot.isSafe ? 'plays safe' : 'shoots!'}`);
+    this.aiThinking = false;
+    this.ballsHaveMoved = true;
+  }
+
+  private findBestAIShot(): { targetX: number; targetY: number; isSafe: boolean } | null {
+    if (!this.currentPlayerGroup || !this.cueBall) return null;
+
+    const cueBall = this.cueBall;
+    const targetBalls = this.balls.filter(ball => {
+      const ballType = ball.getData('type');
+      return ball.active && !ball.getData('pocketed') && ballType === this.currentPlayerGroup;
+    });
+
+    if (targetBalls.length === 0) return null;
+
+    let bestShot: { targetX: number; targetY: number; score: number; isSafe: boolean } | null = null;
+
+    // Evaluate each target ball and pocket combination
+    for (const ball of targetBalls) {
+      // Find best pocket for this ball
+      const bestPocket = this.findBestPocketForBall(ball);
+      if (!bestPocket) continue;
+
+      // Calculate shot quality
+      const shotQuality = this.calculateShotQuality(cueBall, ball, bestPocket);
+      
+      // Add some randomness to shot selection based on difficulty
+      const difficultyModifier = this.getDifficultyShotModifier();
+      const adjustedScore = shotQuality.score * difficultyModifier;
+
+      if (!bestShot || adjustedScore > bestShot.score) {
+        bestShot = {
+          targetX: ball.x,
+          targetY: ball.y,
+          score: adjustedScore,
+          isSafe: shotQuality.isSafe
+        };
+      }
+    }
+
+    return bestShot;
+  }
+
+  private findBestPocketForBall(ball: Phaser.Physics.Matter.Sprite): { x: number; y: number } | null {
+    let bestPocket: { x: number; y: number } | null = null;
+    let bestScore = -Infinity;
+
+    for (const pocket of this.pocketPositions) {
+      // Calculate distance from ball to pocket
+      const distance = Phaser.Math.Distance.Between(ball.x, ball.y, pocket.x, pocket.y);
+      
+      // Check if path is clear (simplified line of sight)
+      const isPathClear = this.isPathClear(ball, pocket);
+      
+      if (!isPathClear) continue;
+
+      // Score based on proximity (closer is better) and angle
+      const score = 1000 / distance + (isPathClear ? 50 : 0);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestPocket = pocket;
+      }
+    }
+
+    return bestPocket;
+  }
+
+  private isPathClear(ball: Phaser.Physics.Matter.Sprite, target: { x: number; y: number }): boolean {
+    // Simplified path checking - check if any ball is blocking the path
+    const pathLine = new Phaser.Geom.Line(ball.x, ball.y, target.x, target.y);
+    const blockageThreshold = 40;
+
+    for (const otherBall of this.balls) {
+      if (otherBall === ball || !otherBall.active || otherBall.getData('pocketed')) continue;
+      
+      // Use blockageThreshold for the blocking ball's radius check
+      if (Phaser.Geom.Intersects.LineToCircle(pathLine,
+        new Phaser.Geom.Circle(otherBall.x, otherBall.y, blockageThreshold / 2))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private calculateShotQuality(cueBall: Phaser.Physics.Matter.Sprite, targetBall: Phaser.Physics.Matter.Sprite, pocket: { x: number; y: number }): { score: number; isSafe: boolean } {
+    // Calculate if the shot is safe (no chance of scratching)
+    const cueToTargetDist = Phaser.Math.Distance.Between(cueBall.x, cueBall.y, targetBall.x, targetBall.y);
+    const targetToPocketDist = Phaser.Math.Distance.Between(targetBall.x, targetBall.y, pocket.x, pocket.y);
+    
+    // Check if cue ball could easily go into pocket
+    const cueToPocketDist = Phaser.Math.Distance.Between(cueBall.x, cueBall.y, pocket.x, pocket.y);
+    const isRiskyShot = cueToPocketDist < cueToTargetDist * 1.5;
+    
+    // Calculate cut angle (how straight the shot is)
+    const angleToTarget = Phaser.Math.Angle.Between(cueBall.x, cueBall.y, targetBall.x, targetBall.y);
+    const angleToPocket = Phaser.Math.Angle.Between(targetBall.x, targetBall.y, pocket.x, pocket.y);
+    const cutAngle = Phaser.Math.Angle.Wrap(angleToPocket - angleToTarget + Math.PI);
+    
+    // Lower cut angle means easier shot
+    const cutAngleDegrees = Phaser.Math.RadToDeg(cutAngle);
+    const isEasierShot = cutAngleDegrees < 30;
+
+    // Score based on multiple factors
+    let score = 0;
+    score += (10 - cueToTargetDist / 50) * 10; // Prefer closer balls
+    score += (10 - targetToPocketDist / 50) * 10; // Prefer balls closer to pockets
+    score += isEasierShot ? 30 : 0; // Bonus for easier cut angles
+    score += !isRiskyShot ? 20 : -20; // Penalty for risky shots
+    score += Math.random() * 10; // Add some randomness
+
+    return {
+      score: Math.max(0, score),
+      isSafe: !isRiskyShot && isEasierShot
+    };
+  }
+
+  private getDifficultyShotModifier(): number {
+    // Add variation to shot selection based on difficulty
+    switch (this.aiDifficulty) {
+      case 'easy':
+        return 0.7 + Math.random() * 0.6; // 0.7 - 1.3
+      case 'hard':
+        return 0.95 + Math.random() * 0.1; // 0.95 - 1.05
+      case 'medium':
+      default:
+        return 0.85 + Math.random() * 0.3; // 0.85 - 1.15
+    }
+  }
+
+  private executeDefensiveShot(): boolean {
+    if (!this.cueBall) return false;
+
+    // Defensive shot: hit the cue ball away from opponent's balls and towards center
+    const { feltLeft, feltRight, feltTop, feltBottom } = this.tableBounds;
+    
+    // Aim towards center of table
+    const centerX = (feltLeft + feltRight) / 2;
+    const centerY = (feltTop + feltBottom) / 2;
+    
+    const angle = Phaser.Math.Angle.Between(
+      this.cueBall.x, this.cueBall.y,
+      centerX, centerY
+    );
+
+    // Add some randomness
+    const randomAngle = angle + (Math.random() - 0.5) * 0.5;
+    const power = 0.4 + Math.random() * 0.4;
+
+    this.cueBall.setVelocity(
+      Math.cos(randomAngle) * power * 150,
+      Math.sin(randomAngle) * power * 150
+    );
+
+    this.updateMessage('AI plays defensive!');
+    this.aiThinking = false;
+    this.ballsHaveMoved = true;
+    return true;
+  }
+
+  private executeRandomShot() {
+    if (!this.cueBall) return;
+
+    // Random direction and power
+    const randomAngle = Math.random() * Math.PI * 2;
+    const power = 0.5 + Math.random() * 0.5;
+
+    this.cueBall.setVelocity(
+      Math.cos(randomAngle) * power * 150,
+      Math.sin(randomAngle) * power * 150
+    );
+
+    this.updateMessage('AI shoots randomly!');
+    this.aiThinking = false;
+    this.ballsHaveMoved = true;
   }
 
   private endGame(winnerTurn: number, result: 'win' | 'lose') {
@@ -1445,12 +2256,13 @@ class PoolGameScene extends Phaser.Scene {
     const winner = this.gameData.players[winnerTurn];
     const loser = this.gameData.players[(winnerTurn + 1) % 2];
     
-    const resultText = result === 'win' ? 'WINS!' : 'LOOSES (8-ball pocketed early)';
+    const resultText = result === 'win' ? 'WINS!' : 'LOSES';
+    const reasonText = result === 'lose' ? '(8-ball pocketed early)' : '';
     
     this.turnText?.setText('');
     
     // Game over message
-    const gameOverText = this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, 'GAME OVER', {
+    this.add.text(this.scale.width / 2, this.scale.height / 2 - 80, 'GAME OVER', {
       fontSize: '48px',
       color: '#ffd700',
       fontStyle: 'bold',
@@ -1458,9 +2270,15 @@ class PoolGameScene extends Phaser.Scene {
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5);
     
-    const winnerText = this.add.text(this.scale.width / 2, this.scale.height / 2 + 20, `${winner.username} ${resultText}`, {
+    this.add.text(this.scale.width / 2, this.scale.height / 2 - 20, `${winner.username} ${resultText}`, {
       fontSize: '32px',
       color: result === 'win' ? '#00ff00' : '#ff0000'
+    }).setOrigin(0.5);
+    
+    // Display loser information
+    this.add.text(this.scale.width / 2, this.scale.height / 2 + 30, `${loser.username} ${reasonText}`, {
+      fontSize: '20px',
+      color: '#aaaaaa'
     }).setOrigin(0.5);
     
     this.updateScore();
@@ -1479,9 +2297,6 @@ class PoolGameScene extends Phaser.Scene {
   update() {
     this.frameCount++;
     
-    // Clamp physics timestep to prevent explosions
-    const delta = Math.min(this.game.loop.delta, 16.66);
-    
     // Boundary validation every 5 frames
     if (this.frameCount % 5 === 0) {
       this.validateBoundaries();
@@ -1497,8 +2312,9 @@ class PoolGameScene extends Phaser.Scene {
       const allBallsStopped = this.checkAllBallsStopped();
       
       if (allBallsStopped) {
-        // Check for foul if no ball was hit
+        // Check for foul if no ball was hit (only in 8-ball mode after break)
         if (!this.firstBallHit && this.gameType === 'eightball') {
+          console.log(`[FOUL] Player ${this.currentPlayerTurn + 1} committed FOUL - no ball hit`);
           this.foulsThisTurn.push('no_ball_hit');
           this.handleFoul(['no_ball_hit']);
         }
@@ -1515,12 +2331,6 @@ class PoolGameScene extends Phaser.Scene {
     }
   }
 
-  private getBallSpeed(ball: Phaser.Physics.Matter.Sprite): number {
-    if (!ball || !ball.body || !ball.body.velocity) return 0;
-    const vel = ball.body.velocity;
-    return Math.sqrt(vel.x ** 2 + vel.y ** 2);
-  }
-
   private checkAllBallsStopped(): boolean {
     // Check if all active balls have stopped moving (using velocity threshold)
     const activeBalls = this.balls.filter(ball => ball.active && !ball.getData('pocketed'));
@@ -1533,29 +2343,6 @@ class PoolGameScene extends Phaser.Scene {
       
       return vx < this.STOP_THRESHOLD && vy < this.STOP_THRESHOLD;
     });
-  }
-
-  private endTurn() {
-    // Comprehensive turn end cleanup
-    this.canShoot = true;
-    this.isAiming = false;
-    this.shotPower = 0;
-    this.firstBallHit = null;
-    this.ballsPocketedThisTurn = [];
-    this.foulsThisTurn = [];
-    this.ballsHaveMoved = false;
-    this.turnSwitchScheduled = false;
-    
-    // Clean up any remaining UI elements
-    if (this.cue) {
-      this.cue.destroy();
-      this.cue = null;
-    }
-    
-    if (this.powerIndicator) {
-      this.powerIndicator.destroy();
-      this.powerIndicator = null;
-    }
   }
 
   private validateBoundaries() {
@@ -1595,51 +2382,55 @@ class PoolGameScene extends Phaser.Scene {
 
   private checkPockets() {
     if (this.gameOver) return;
-    
-    const pocketRadius = 20; // Smaller radius for more realistic pocketing
+
+    const pocketRadius = 25; // Increased radius for more reliable pocketing
     const pocketRadiusSq = pocketRadius ** 2;
-    
+
     this.balls.forEach(ball => {
       if (!ball.active || ball.getData('pocketed')) return;
-      if (ball.getData('type') === 'cue') return;
-      
+
       const ballX = ball.x;
       const ballY = ball.y;
-      const ballSpeed = this.getBallSpeed(ball);
-      
+      const ballType = ball.getData('type');
+
       for (const pocket of this.pocketPositions) {
         const dx = ballX - pocket.x;
         const dy = ballY - pocket.y;
         const distanceSq = dx * dx + dy * dy;
-        
-        // Check if ball is close enough to pocket and moving slowly enough
-        if (distanceSq < pocketRadiusSq && ballSpeed < 2) {
+
+        // Check if ball is close enough to pocket (removed speed restriction for more reliable pocketing)
+        if (distanceSq < pocketRadiusSq) {
+          // Handle cue ball pocketing (foul)
+          if (ball.getData('type') === 'cue') {
+            this.handleCueBallPocketed(ball);
+            break;
+          }
+
           // Ball pocketed - add visual effect
-          this.createPocketingEffect(pocket.x, pocket.y, ball.getData('type'));
-          
+          this.createPocketingEffect(pocket.x, pocket.y);
+
           ball.setData('pocketed', true);
           ball.setActive(false);
           ball.setVisible(false);
           ball.setVelocity(0, 0);
-          
-          const ballType = ball.getData('type');
+
           const ballNumber = ball.getData('number');
-          
+
           this.ballsPocketedThisTurn.push({ number: ballNumber, type: ballType });
           this.pocketedBalls.push({ number: ballNumber, type: ballType, player: this.currentPlayerTurn });
           this.updatePortedBallsDisplay();
-          
+
           // Update message
           const currentPlayer = this.gameData?.players?.[this.currentPlayerTurn];
           if (currentPlayer) {
             this.updateMessage(`${currentPlayer.username} pocketed ${ballType === 'solid' ? 'a solid' : ballType === 'stripe' ? 'a stripe' : 'the 8-ball'}!`);
           }
-          
-          if (ballType === 'solid') this.ballsRemaining.solid--;
-          if (ballType === 'stripe') this.ballsRemaining.stripe--;
-          
-          if (ballType === 'eight') {
-            this.handleEightBallPocketed(ball);
+
+          if (ball.getData('type') === 'solid') this.ballsRemaining.solid--;
+          if (ball.getData('type') === 'stripe') this.ballsRemaining.stripe--;
+
+          if (ball.getData('type') === 'eight') {
+            this.handleEightBallPocketed();
           }
           break;
         }
@@ -1647,7 +2438,7 @@ class PoolGameScene extends Phaser.Scene {
     });
   }
 
-  private createPocketingEffect(x: number, y: number, ballType: string) {
+  private createPocketingEffect(x: number, y: number) {
     // Create a small explosion/particle effect using graphics
     const particleCount = 12;
     const colors = [0xffd700, 0xff0000, 0x00ff00, 0x0000ff, 0xff00ff];
@@ -1670,7 +2461,9 @@ class PoolGameScene extends Phaser.Scene {
         alpha: 0,
         duration: life,
         onComplete: () => {
-          particle.destroy();
+          if (particle && particle.active) {
+            particle.destroy();
+          }
         }
       });
     }
