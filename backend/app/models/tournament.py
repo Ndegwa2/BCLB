@@ -9,10 +9,11 @@ class Tournament(db.Model):
     game_type = db.Column(db.String(20), nullable=False)
     entry_fee = db.Column(db.Numeric(10, 2), nullable=False)
     max_players = db.Column(db.Integer, nullable=False)
-    status = db.Column(db.String(20), default='open')  # 'open', 'in_progress', 'completed', 'cancelled', 'paused'
+    status = db.Column(db.String(20), default='open', index=True)  # 'open', 'in_progress', 'completed', 'cancelled', 'paused'
     format = db.Column(db.String(30), default='single_elimination')  # 'single_elimination', 'double_elimination'
     winner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=True)
+    creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     current_round = db.Column(db.Integer, default=1)
     total_rounds = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -40,6 +41,10 @@ class Tournament(db.Model):
 
 class TournamentEntry(db.Model):
     __tablename__ = 'tournament_entries'
+    __table_args__ = (
+        db.Index('idx_tournament_entries_tournament_id', 'tournament_id'),
+        db.Index('idx_tournament_entries_user_id', 'user_id'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     tournament_id = db.Column(db.Integer, db.ForeignKey('tournaments.id'), nullable=False)

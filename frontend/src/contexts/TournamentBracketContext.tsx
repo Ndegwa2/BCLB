@@ -5,8 +5,7 @@ import {
   TournamentMatch,
   TournamentBracketState,
   TournamentBracketActions,
-  AdvanceWinnerRequest,
-  TournamentEntry
+  AdvanceWinnerRequest
 } from '../types/tournament';
 import { apiClient } from '../services/api';
 
@@ -159,8 +158,9 @@ export const TournamentBracketProvider: React.FC<TournamentBracketProviderProps>
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'SET_ERROR', payload: null });
 
-      const response = await apiClient.get(`/tournaments/${tournamentId}`);
-      const { tournament, entries, bracket } = response.data;
+      // apiClient already returns response.data, so we access directly
+      const responseData = await apiClient.get(`/tournaments/${tournamentId}`);
+      const { tournament, entries, bracket } = responseData;
 
       // Process tournament data
       const processedTournament = {
@@ -178,9 +178,9 @@ export const TournamentBracketProvider: React.FC<TournamentBracketProviderProps>
 
     } catch (error) {
       console.error('Failed to load tournament:', error);
-      dispatch({ 
-        type: 'SET_ERROR', 
-        payload: error instanceof Error ? error.message : 'Failed to load tournament' 
+      dispatch({
+        type: 'SET_ERROR',
+        payload: error instanceof Error ? error.message : 'Failed to load tournament'
       });
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -190,8 +190,9 @@ export const TournamentBracketProvider: React.FC<TournamentBracketProviderProps>
   // Refresh bracket data
   const refreshBracket = async (tournamentId: number): Promise<void> => {
     try {
-      const response = await apiClient.get(`/tournaments/${tournamentId}`);
-      const { tournament, bracket } = response.data;
+      // apiClient already returns response.data, so we access directly
+      const responseData = await apiClient.get(`/tournaments/${tournamentId}`);
+      const { tournament, bracket } = responseData;
 
       dispatch({ type: 'SET_TOURNAMENT', payload: tournament });
       dispatch({ type: 'SET_BRACKET', payload: bracket });
@@ -201,9 +202,9 @@ export const TournamentBracketProvider: React.FC<TournamentBracketProviderProps>
 
     } catch (error) {
       console.error('Failed to refresh bracket:', error);
-      dispatch({ 
-        type: 'SET_ERROR', 
-        payload: error instanceof Error ? error.message : 'Failed to refresh bracket' 
+      dispatch({
+        type: 'SET_ERROR',
+        payload: error instanceof Error ? error.message : 'Failed to refresh bracket'
       });
     }
   };
@@ -241,11 +242,12 @@ export const TournamentBracketProvider: React.FC<TournamentBracketProviderProps>
         match_index: match.match_index
       };
 
-      const response = await apiClient.post(`/tournaments/${state.currentTournament.id}/advance`, advanceRequest);
+      // apiClient already returns response.data, so we access directly
+      const responseData = await apiClient.post(`/tournaments/${state.currentTournament.id}/advance`, advanceRequest);
 
       // Update local state with response data
-      if (response.data.tournament) {
-        dispatch({ type: 'UPDATE_TOURNAMENT', payload: response.data.tournament });
+      if (responseData.tournament) {
+        dispatch({ type: 'UPDATE_TOURNAMENT', payload: responseData.tournament });
       }
 
       // Refresh bracket to get updated state
@@ -253,9 +255,9 @@ export const TournamentBracketProvider: React.FC<TournamentBracketProviderProps>
 
     } catch (error) {
       console.error('Failed to advance winner:', error);
-      dispatch({ 
-        type: 'SET_ERROR', 
-        payload: error instanceof Error ? error.message : 'Failed to advance winner' 
+      dispatch({
+        type: 'SET_ERROR',
+        payload: error instanceof Error ? error.message : 'Failed to advance winner'
       });
       throw error;
     } finally {

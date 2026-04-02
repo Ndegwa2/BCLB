@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { TournamentBracket } from './TournamentBracket';
+// Note: TournamentBracket component has been replaced by PoolTournamentBracket
+// This demo file uses the original component - import from legacy source if needed
+const TournamentBracket: React.FC<any> = () => <div className="text-white p-4">Tournament Bracket Demo - Component refactored. See PoolTournamentBracket for new implementation.</div>;
 import { AdminTournamentControls } from './AdminTournamentControls';
 import { TournamentBracketProvider, useTournamentBracket } from '../../contexts/TournamentBracketContext';
 import { Tournament, TournamentBracket as TournamentBracketType, TournamentRound, TournamentMatch } from '../../types/tournament';

@@ -3,12 +3,17 @@ from ..models import db
 
 class WalletTransaction(db.Model):
     __tablename__ = 'wallet_transactions'
+    __table_args__ = (
+        db.Index('idx_wallet_transactions_user_id', 'user_id'),
+        db.Index('idx_wallet_transactions_status', 'status'),
+        db.Index('idx_wallet_transactions_tx_type', 'tx_type'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     direction = db.Column(db.String(10), nullable=False)  # 'credit' or 'debit'
-    tx_type = db.Column(db.String(20), nullable=False)  # 'deposit', 'withdrawal', 'game_win', 'game_loss', 'house_cut'
-    status = db.Column(db.String(20), default='pending')  # 'pending', 'success', 'failed'
+    tx_type = db.Column(db.String(20), nullable=False)  # 'deposit', 'withdrawal', 'game_win', 'game_loss', 'house_cut', 'game_stake', 'tournament_entry', 'tournament_win', 'game_refund'
+    status = db.Column(db.String(20), default='pending', index=True)  # 'pending', 'success', 'failed'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     description = db.Column(db.String(255))

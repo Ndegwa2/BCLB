@@ -3,15 +3,31 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useWallet } from '../../contexts/WalletContext'
 import { useGame } from '../../contexts/GameContext'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import {
+  Wallet,
+  TrendingUp,
+  Gamepad2,
+  Trophy,
+  Clock,
+  Plus,
+  LogOut,
+  Sparkles,
+  Target,
+  Zap
+} from 'lucide-react'
 import { apiClient } from '../../services/api'
+import { toast } from 'sonner'
 import DashboardCard from './DashboardCard'
 import GameHistoryTable from './GameHistoryTable'
+import PlayerSidebar from './PlayerSidebar'
 
 const PlayerDashboard: React.FC = () => {
-  const { state: authState } = useAuth()
+  const { state: authState, logout } = useAuth()
   const {
     balance,
-    recentPayment,
+    availableBalance,
+    lockedBalance,
     loading: walletLoading,
     error: walletError
   } = useWallet()
@@ -26,51 +42,42 @@ const PlayerDashboard: React.FC = () => {
   const navigate = useNavigate()
   const [creatingGame, setCreatingGame] = useState(false)
 
-  // Handle "Play Your First Game" button click
   const handlePlayFirstGame = async () => {
     try {
       setCreatingGame(true)
-
-      // Create a new pool game
       const response = await apiClient.post('/games', {
         game_type: 'pool_8ball',
-        stake_amount: 0, // Free game for first time
-        is_free: true
+        stake_amount: 0,
+        allow_ai: true
       })
-
-      const newGame = response.data.game
-
-      // Refresh game data to include the new game
+      const newGame = response.game
       await refreshGameData()
-
-      // Navigate to the new game
       navigate(`/games/play/${newGame.id}`)
-
-    } catch (error) {
-      console.error('Error creating game:', error)
-      alert('Failed to create game. Please try again.')
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to create game')
     } finally {
       setCreatingGame(false)
     }
   }
 
-  // Format game history for the table
+  const handleQuickDeposit = () => {
+    navigate('/wallet')
+  }
+
   const formatGameHistory = () => {
-    return gameHistory.slice(0, 3).map((game, index) => {
+    return gameHistory.slice(0, 5).map((game) => {
       const date = new Date(game.created_at).toLocaleDateString('en-US', {
         month: 'short',
-        day: 'numeric',
-        year: game.created_at.includes('2024') ? 'numeric' : undefined
+        day: 'numeric'
       })
-      
-      // Format game type for display
+
       let gameDisplayName = ''
       switch (game.game_type) {
         case 'draw_1v1':
           gameDisplayName = 'Poker'
           break
         case 'pool_8ball':
-          gameDisplayName = 'Chess'
+          gameDisplayName = 'Pool'
           break
         case 'card_blackjack':
           gameDisplayName = 'Blackjack'
@@ -82,146 +89,251 @@ const PlayerDashboard: React.FC = () => {
       return {
         id: game.id.toString(),
         game: gameDisplayName,
-        date: index === 0 ? 'Today' : index === 1 ? 'Yesterday' : date,
-        result: game.my_entry?.result || 'loss'
+        date,
+        result: game.my_entry?.result || 'loss',
+        stake: game.stake_amount,
+        payout: game.my_entry?.result === 'win' ? game.total_pot / 2 : game.stake_amount
       }
     })
   }
 
-  // Loading state
-  if (walletLoading || gameLoading) {
+  const isLoading = walletLoading || gameLoading
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-400">Loading dashboard...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="player-dashboard min-h-screen bg-slate-900 dashboard-transition">
+    <div className="min-h-screen bg-slate-950">
+      {/* Sidebar */}
+      <PlayerSidebar className="hidden lg:block" />
+
       {/* Main Content */}
-      <div className="main-content">
-        <div className="p-6 space-y-8">
+      <div className="lg:ml-64">
+        <div className="p-4 md:p-8 space-y-8">
           {/* Header */}
-          <header className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+          <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-4xl font-bold text-white mb-2">Player Dashboard</h1>
-              {walletError && (
-                <p className="text-red-400 text-sm">{walletError}</p>
-              )}
-              {gameError && (
-                <p className="text-red-400 text-sm">{gameError}</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">
+                Welcome back, <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{authState.user?.username || 'Player'}</span>
+              </h1>
+              <p className="text-slate-400 text-sm mt-1">Ready to play? Here's your gaming overview</p>
+              {(walletError || gameError) && (
+                <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <p className="text-red-400 text-xs">{walletError || gameError}</p>
+                </div>
               )}
             </div>
-            
-            {/* Avatar */}
-            <div className="flex items-center space-x-4 order-first lg:order-last">
-              <div className="text-right">
-                <div className="text-white font-semibold">
-                  {authState.user?.username || 'Player'}
-                </div>
-                <div className="text-slate-400 text-sm">Level 42</div>
-              </div>
-              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
-                <div className="relative">
-                  {/* Avatar face */}
-                  <div className="w-8 h-8 bg-yellow-400 rounded-full"></div>
-                  <div className="w-4 h-4 bg-orange-300 rounded-full absolute -top-1 left-1"></div>
-                  <div className="w-8 h-4 bg-orange-400 rounded-full absolute -bottom-1 left-0"></div>
-                </div>
-              </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleQuickDeposit}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg shadow-green-500/20"
+              >
+                <Plus className="w-4 h-4" />
+                Deposit
+              </button>
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
             </div>
           </header>
 
-          {/* Summary Cards Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Balance Card */}
+          {/* Stats Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <DashboardCard
-              title="Balance"
-              value={`${balance.toFixed(2)}`}
-              gradient="blue"
-              className="h-40 dashboard-transition"
-            />
-            
-            {/* Recent Payment Card */}
-            <DashboardCard
-              title="Recent Payment"
-              value={`${recentPayment.toFixed(2)}`}
+              title="Available Balance"
+              value={`$${availableBalance.toFixed(2)}`}
+              subtitle={`Locked: $${lockedBalance.toFixed(2)}`}
               gradient="green"
-              className="h-40 dashboard-transition"
+              icon={Wallet}
+              trend={{ value: 12.5, isPositive: true }}
+            />
+            <DashboardCard
+              title="Total Balance"
+              value={`$${balance.toFixed(2)}`}
+              subtitle="All funds"
+              gradient="blue"
+              icon={TrendingUp}
+            />
+            <DashboardCard
+              title="Active Games"
+              value={activeGames.length}
+              subtitle="In progress"
+              gradient="purple"
+              icon={Gamepad2}
+            />
+            <DashboardCard
+              title="Tournaments"
+              value={upcomingTournaments.length}
+              subtitle="Upcoming events"
+              gradient="orange"
+              icon={Trophy}
             />
           </div>
 
-          {/* Active Games and Tournaments Row */}
-          <div className="card-dark bg-slate-800 rounded-2xl p-6 shadow-xl">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div>
-                <h3 className="text-slate-300 text-lg font-semibold mb-4">Active Games</h3>
-                <p className="text-white text-5xl font-bold">{activeGames.length}</p>
-              </div>
+          {/* Quick Actions */}
+          <div className="glass-card p-6">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-yellow-400" />
+              Quick Actions
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate('/play-vs-ai')}
+                className="flex flex-col items-center gap-2 p-4 bg-slate-800/50 rounded-xl hover:bg-slate-800 transition-colors border border-slate-700/50"
+              >
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-sm text-white font-medium">Play vs AI</span>
+              </motion.button>
               
-              <div>
-                <h3 className="text-slate-300 text-lg font-semibold mb-4">Upcoming Tournaments</h3>
-                <p className="text-white text-5xl font-bold">{upcomingTournaments.length}</p>
-              </div>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate('/games')}
+                className="flex flex-col items-center gap-2 p-4 bg-slate-800/50 rounded-xl hover:bg-slate-800 transition-colors border border-slate-700/50"
+              >
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                  <Gamepad2 className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-sm text-white font-medium">Browse Games</span>
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate('/tournaments')}
+                className="flex flex-col items-center gap-2 p-4 bg-slate-800/50 rounded-xl hover:bg-slate-800 transition-colors border border-slate-700/50"
+              >
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                  <Trophy className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-sm text-white font-medium">Tournaments</span>
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleQuickDeposit}
+                className="flex flex-col items-center gap-2 p-4 bg-slate-800/50 rounded-xl hover:bg-slate-800 transition-colors border border-slate-700/50"
+              >
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
+                  <Wallet className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-sm text-white font-medium">Deposit</span>
+              </motion.button>
             </div>
           </div>
 
-          {/* Game History Section */}
+          {/* Game History */}
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-white">Game History</h2>
-            
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-slate-400" />
+                Recent Games
+              </h2>
+              <button
+                onClick={() => navigate('/games')}
+                className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                View All
+              </button>
+            </div>
+
             {gameHistory.length > 0 ? (
-              <GameHistoryTable 
-                games={formatGameHistory()} 
-                className="w-full dashboard-transition"
+              <GameHistoryTable
+                games={formatGameHistory()}
+                className="w-full"
               />
             ) : (
-              <div className="bg-slate-900 rounded-2xl p-8 text-center">
-                <p className="text-slate-400 text-lg">No game history available</p>
-                <button
-                  className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-800"
+              <div className="glass-card p-12 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center mx-auto mb-4">
+                  <Target className="w-8 h-8 text-purple-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">No games played yet</h3>
+                <p className="text-slate-400 mb-6">Start your gaming journey by playing your first game!</p>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={handlePlayFirstGame}
                   disabled={creatingGame}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold shadow-lg shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {creatingGame ? 'Creating Game...' : 'Play Your First Game'}
-                </button>
+                </motion.button>
               </div>
             )}
           </div>
 
-          {/* Upcoming Tournaments Preview */}
+          {/* Upcoming Tournaments */}
           {upcomingTournaments.length > 0 && (
             <div className="space-y-4">
-              <h2 className="text-2xl font-bold text-white">Upcoming Tournaments</h2>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  Upcoming Tournaments
+                </h2>
+                <button
+                  onClick={() => navigate('/tournaments')}
+                  className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+                >
+                  View All
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {upcomingTournaments.map((tournament) => (
-                  <div
+                  <motion.div
                     key={tournament.id}
-                    className="card-dark bg-slate-800 rounded-2xl p-6 shadow-xl hover:bg-slate-750 transition-colors cursor-pointer dashboard-transition"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ y: -4 }}
+                    onClick={() => navigate(`/tournaments/${tournament.id}`)}
+                    className="glass-card p-6 cursor-pointer group"
                   >
-                    <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-white font-semibold text-lg">{tournament.name}</h3>
-                      <div className="text-emerald-400 font-bold text-lg">{tournament.prize}</div>
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="text-white font-semibold text-lg group-hover:text-purple-400 transition-colors">
+                          {tournament.name}
+                        </h3>
+                        <p className="text-slate-400 text-sm mt-1">{tournament.format}</p>
+                      </div>
+                      <div className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-sm font-medium">
+                        {tournament.status}
+                      </div>
                     </div>
-                    <p className="text-slate-300">{new Date(tournament.date).toLocaleDateString()}</p>
-                  </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="text-slate-400">
+                        <span className="text-white font-semibold">{tournament.max_players}</span> players max
+                      </div>
+                      <div className="text-green-400 font-semibold">
+                        Entry: ${tournament.entry_fee}
+                      </div>
+                    </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Mobile Navigation (if needed) */}
-      <div className="mobile-nav hidden lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-2 flex justify-around">
-        {/* Mobile navigation content would go here */}
-      </div>
     </div>
   )
-
-  return null
 }
 
 export default PlayerDashboard

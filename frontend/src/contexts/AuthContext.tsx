@@ -71,10 +71,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (credentials: LoginCredentials) => {
     try {
       dispatch({ type: 'LOGIN_START' })
+      console.log('Attempting login with:', credentials)
       const response = await authAPI.login(credentials)
+      console.log('Login response:', response)
       authStorage.setToken(response.token)
       dispatch({ type: 'LOGIN_SUCCESS', payload: response })
     } catch (error: any) {
+      console.error('Login error:', error)
       const errorMessage = error.response?.data?.error || 'Login failed. Please try again.'
       dispatch({ type: 'LOGIN_FAILURE', payload: errorMessage })
     }

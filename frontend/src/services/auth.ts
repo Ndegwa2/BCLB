@@ -4,12 +4,12 @@ import { AuthResponse, LoginCredentials, RegisterCredentials } from '../types/au
 export const authAPI = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     const response = await apiClient.post('/auth/login', credentials)
-    return response.data
+    return response
   },
 
   register: async (credentials: RegisterCredentials): Promise<AuthResponse> => {
     const response = await apiClient.post('/auth/register', credentials)
-    return response.data
+    return response
   },
 
   logout: async (): Promise<void> => {
@@ -20,11 +20,11 @@ export const authAPI = {
     const response = await apiClient.get('/auth/me', {
       headers: { Authorization: `Bearer ${token}` }
     })
-    return { user: response.data.user }
+    return { user: response.user }
   },
 
   getCurrentUser: async (): Promise<any> => {
     const response = await apiClient.get('/auth/me')
-    return response.data.user
+    return response.user
   },
 }

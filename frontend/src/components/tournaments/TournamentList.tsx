@@ -6,6 +6,7 @@ import { Tournament } from '../../types/tournament'
 import { apiClient } from '../../services/api'
 
 export const TournamentList: React.FC = () => {
+  const navigate = useNavigate()
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [filteredTournaments, setFilteredTournaments] = useState<Tournament[]>([])
   const [loading, setLoading] = useState(true)
@@ -14,77 +15,24 @@ export const TournamentList: React.FC = () => {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
 
-  // Mock data for development - replace with actual API calls
+  // Fetch open tournaments from API
   useEffect(() => {
     const fetchTournaments = async () => {
       try {
         setLoading(true)
         setError(null)
 
-        // TODO: Replace with actual API call to /api/tournaments/open
-        // const response = await apiClient.get('/tournaments/open', {
-        //   params: { page, game_type: filter === 'all' ? undefined : filter }
-        // })
-        // setTournaments(response.data.tournaments)
-        // setTotalPages(response.data.pagination.pages)
+        const params: Record<string, any> = { page, limit: 10 }
+        if (filter !== 'all') {
+          params.game_type = filter
+        }
 
-        // Mock data
-        const mockTournaments: Tournament[] = [
-          {
-            id: 1,
-            name: 'Weekly Draw Championship',
-            game_type: 'draw_1v1',
-            entry_fee: 50,
-            max_players: 16,
-            status: 'open',
-            format: 'single_elimination',
-            created_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-            entries: []
-          },
-          {
-            id: 2,
-            name: 'Pool Masters Tournament',
-            game_type: 'pool_8ball',
-            entry_fee: 100,
-            max_players: 8,
-            status: 'in_progress',
-            format: 'double_elimination',
-            created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-            entries: []
-          },
-          {
-            id: 3,
-            name: 'Blackjack Pro League',
-            game_type: 'card_blackjack',
-            entry_fee: 75,
-            max_players: 32,
-            status: 'open',
-            format: 'single_elimination',
-            created_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-            entries: []
-          },
-          {
-            id: 4,
-            name: 'High Stakes Poker Cup',
-            game_type: 'draw_1v1',
-            entry_fee: 200,
-            max_players: 4,
-            status: 'open',
-            format: 'single_elimination',
-            created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-            entries: []
-          }
-        ]
+        const response = await apiClient.get('/tournaments/open', { params })
+        setTournaments(response.tournaments || [])
+        setTotalPages(response.pagination?.pages || 1)
 
-        setTournaments(mockTournaments)
-        setTotalPages(1)
-
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch tournaments')
+      } catch (err: any) {
+        setError(err.response?.data?.error || err.message || 'Failed to fetch tournaments')
       } finally {
         setLoading(false)
       }
@@ -109,9 +57,7 @@ export const TournamentList: React.FC = () => {
   }
 
   const handleView = (tournamentId: number) => {
-    // TODO: Implement tournament viewing functionality
-    console.log('Viewing tournament:', tournamentId)
-    // This would navigate to tournament details page
+    navigate(`/tournaments/${tournamentId}`)
   }
 
   const handlePageChange = (newPage: number) => {

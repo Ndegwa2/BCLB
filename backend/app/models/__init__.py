@@ -8,16 +8,17 @@ from .user import User
 from .transaction import WalletTransaction
 from .wallet import Payment
 from .game import Game, GameEntry
-from .tournament import Tournament, TournamentEntry
+from .tournament import Tournament, TournamentEntry, TournamentMatch
 
 # Export all models for easy import
 __all__ = [
     'db',
     'User',
-    'WalletTransaction', 
+    'WalletTransaction',
     'Payment',
     'Game',
     'GameEntry',
     'Tournament',
-    'TournamentEntry'
+    'TournamentEntry',
+    'TournamentMatch'
 ]

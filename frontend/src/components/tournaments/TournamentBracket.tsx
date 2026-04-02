@@ -1,582 +1,475 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Tournament,
-  TournamentMatch,
-  TournamentBracket as TournamentBracketType,
-  TournamentRound,
-  BracketVisualizationProps,
-  AdvanceWinnerRequest,
-  TournamentEntry
-} from '../../types/tournament';
-import { useAuth } from '../../contexts/AuthContext';
-import { useWallet } from '../../contexts/WalletContext';
+import React, { useState, useMemo } from 'react';
 
-interface MatchCardProps {
-  match: TournamentMatch;
-  round: number;
-  onWinnerSelect?: (matchId: string, winnerId: number) => void;
-  isAdmin?: boolean;
-  currentUserId?: number;
-  isSelected?: boolean;
-  onMatchClick?: (match: TournamentMatch) => void;
+/**
+ * PoolTournamentBracket Component
+ * Displays single/double elimination tournament brackets with match details
+ * Specifically designed for 8-ball pool tournaments
+ * This is a standalone component with its own types
+ */
+
+interface TournamentPlayer {
+  id: string;
+  username: string;
+  avatar?: string;
+  seed?: number;
+  isWinner?: boolean;
 }
 
-const MatchCard: React.FC<MatchCardProps> = ({
-  match,
-  round,
-  onWinnerSelect,
-  isAdmin,
-  currentUserId,
-  isSelected,
+interface Match {
+  id: string;
+  round: number;
+  match: number;
+  player1: TournamentPlayer | null;
+  player2: TournamentPlayer | null;
+  winner: TournamentPlayer | null;
+  score?: { player1: number; player2: number };
+  status: 'pending' | 'in_progress' | 'completed';
+  tableNumber?: number;
+}
+
+interface TournamentBracketProps {
+  tournamentName: string;
+  format: 'single_elimination' | 'double_elimination';
+  rounds: Match[][];
+  currentRound: number;
+  prizePool: number;
+  entryFee: number;
+  onMatchClick?: (match: Match) => void;
+}
+
+const PoolTournamentBracket: React.FC<TournamentBracketProps> = ({
+  tournamentName,
+  format,
+  rounds,
+  currentRound,
+  prizePool,
+  entryFee,
   onMatchClick
 }) => {
-  const getPlayerStatus = (playerId?: number, username?: string) => {
-    if (!playerId || !username) return { text: 'TBD', color: 'text-gray-400', bgColor: 'bg-gray-100' };
-    
-    const isCurrentUser = currentUserId === playerId;
-    const isWinner = match.winner_id === playerId;
-    
-    if (isWinner) {
-      return { 
-        text: `${username} ✓`, 
-        color: 'text-green-700', 
-        bgColor: 'bg-green-50 border-green-200' 
-      };
-    }
-    
-    if (isCurrentUser) {
-      return { 
-        text: `${username} (You)`, 
-        color: 'text-blue-700', 
-        bgColor: 'bg-blue-50 border-blue-200' 
-      };
-    }
-    
-    return { 
-      text: username, 
-      color: 'text-gray-700', 
-      bgColor: 'bg-white border-gray-200' 
-    };
-  };
+  const [hoveredMatch, setHoveredMatch] = useState<string | null>(null);
 
-  const player1Status = getPlayerStatus(match.player1_id, match.player1_username);
-  const player2Status = getPlayerStatus(match.player2_id, match.player2_username);
+  // Calculate bracket dimensions
+  const bracketWidth = useMemo(() => {
+    return Math.max(rounds.length * 280, 800);
+  }, [rounds.length]);
 
-  const handleWinnerSelect = (playerId: number) => {
-    if (isAdmin && match.status === 'active' && onWinnerSelect) {
-      onWinnerSelect(match.id, playerId);
-    }
-  };
-
-  const getRoundName = (roundNum: number, totalRounds: number) => {
-    if (roundNum === totalRounds) return 'Final';
-    if (roundNum === totalRounds - 1) return 'Semi-Final';
-    if (roundNum === 1) return 'Round 1';
-    return `Round ${roundNum}`;
-  };
+  const bracketHeight = useMemo(() => {
+    const maxMatchesInRound = Math.max(...rounds.map(r => r.length));
+    return Math.max(maxMatchesInRound * 100, 400);
+  }, [rounds]);
 
   return (
-    <div 
-      className={`bg-white border-2 rounded-lg p-3 shadow-sm transition-all duration-200 ${
-        isSelected ? 'border-blue-400 shadow-md' : 'border-gray-200 hover:border-gray-300'
-      } ${match.status === 'completed' ? 'opacity-75' : ''}`}
-      onClick={() => onMatchClick && onMatchClick(match)}
-    >
-      {/* Match Header */}
-      <div className="text-xs text-gray-500 font-medium mb-2 text-center">
-        {getRoundName(round, 4)}
-      </div>
-
-      {/* Players */}
-      <div className="space-y-2">
-        {/* Player 1 */}
-        <div 
-          className={`p-2 rounded border text-sm font-medium cursor-pointer transition-colors ${
-            player1Status.bgColor
-          } ${player1Status.color} ${
-            isAdmin && match.status === 'active' && match.player1_id ? 'hover:bg-green-100' : ''
-          }`}
-          onClick={() => handleWinnerSelect(match.player1_id!)}
-        >
-          <div className="flex items-center justify-between">
-            <span>{player1Status.text}</span>
-            {match.winner_id === match.player1_id && (
-              <span className="text-green-500 font-bold">★</span>
-            )}
-          </div>
-        </div>
-
-        {/* VS Divider */}
-        <div className="text-xs text-gray-400 text-center">VS</div>
-
-        {/* Player 2 */}
-        <div 
-          className={`p-2 rounded border text-sm font-medium cursor-pointer transition-colors ${
-            player2Status.bgColor
-          } ${player2Status.color} ${
-            isAdmin && match.status === 'active' && match.player2_id ? 'hover:bg-green-100' : ''
-          }`}
-          onClick={() => handleWinnerSelect(match.player2_id!)}
-        >
-          <div className="flex items-center justify-between">
-            <span>{player2Status.text}</span>
-            {match.winner_id === match.player2_id && (
-              <span className="text-green-500 font-bold">★</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Match Status */}
-      <div className="mt-2 text-xs text-center">
-        <span className={`px-2 py-1 rounded-full font-medium ${
-          match.status === 'completed' ? 'bg-green-100 text-green-700' :
-          match.status === 'active' ? 'bg-blue-100 text-blue-700' :
-          'bg-gray-100 text-gray-600'
-        }`}>
-          {match.status === 'completed' ? 'Completed' :
-           match.status === 'active' ? 'Live' : 'Pending'}
-        </span>
-      </div>
-
-      {/* Admin Controls */}
-      {isAdmin && match.status === 'active' && match.player1_id && match.player2_id && (
-        <div className="mt-2 text-xs text-center">
-          <span className="text-yellow-600">Click winner to advance</span>
-        </div>
-      )}
-    </div>
-  );
-};
-
-interface BracketConnectionProps {
-  from: { x: number; y: number; width: number; height: number };
-  to: { x: number; y: number; width: number; height: number };
-  isActive?: boolean;
-}
-
-const BracketConnection: React.FC<BracketConnectionProps> = ({ from, to, isActive = false }) => {
-  const startX = from.x + from.width;
-  const startY = from.y + from.height / 2;
-  const endX = to.x;
-  const endY = to.y + to.height / 2;
-  const midX = startX + (endX - startX) / 2;
-
-  return (
-    <svg
-      className="absolute pointer-events-none z-0"
-      style={{
-        left: 0,
-        top: 0,
-        width: '100%',
-        height: '100%'
-      }}
-    >
-      <path
-        d={`M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`}
-        stroke={isActive ? '#3b82f6' : '#d1d5db'}
-        strokeWidth={isActive ? 3 : 2}
-        fill="none"
-        strokeDasharray={isActive ? 'none' : '5,5'}
-      />
-    </svg>
-  );
-};
-
-interface RoundColumnProps {
-  round: TournamentRound;
-  roundIndex: number;
-  totalRounds: number;
-  matchWidth: number;
-  matchHeight: number;
-  matchSpacingY: number;
-  onWinnerSelect?: (matchId: string, winnerId: number) => void;
-  isAdmin?: boolean;
-  currentUserId?: number;
-  selectedMatch?: TournamentMatch | null;
-  onMatchClick?: (match: TournamentMatch) => void;
-  connections?: Array<{ from: any; to: any }>;
-}
-
-const RoundColumn: React.FC<RoundColumnProps> = ({
-  round,
-  roundIndex,
-  totalRounds,
-  matchWidth,
-  matchHeight,
-  matchSpacingY,
-  onWinnerSelect,
-  isAdmin,
-  currentUserId,
-  selectedMatch,
-  onMatchClick,
-  connections = []
-}) => {
-  const getRoundTitle = (roundNum: number, total: number) => {
-    if (roundNum === total) return 'Final';
-    if (roundNum === total - 1) return 'Semi-Finals';
-    if (roundNum === 1) return 'Round 1';
-    return `Round ${roundNum}`;
-  };
-
-  return (
-    <div className="flex flex-col items-center">
-      {/* Round Title */}
-      <div className="mb-4 text-center">
-        <h3 className="text-sm font-bold text-gray-700 mb-1">
-          {getRoundTitle(round.round, totalRounds)}
-        </h3>
-        <div className="text-xs text-gray-500">
-          {round.matches.length} {round.matches.length === 1 ? 'match' : 'matches'}
-        </div>
-      </div>
-
-      {/* Matches */}
-      <div className="space-y-4 relative">
-        {round.matches.map((match, matchIndex) => {
-          const matchTop = matchIndex * (matchHeight + matchSpacingY);
-          const matchPosition = {
-            x: 0,
-            y: matchTop,
-            width: matchWidth,
-            height: matchHeight
-          };
-
-          return (
-            <div key={match.id} style={{ position: 'relative' }}>
-              <MatchCard
-                match={match}
-                round={round.round}
-                onWinnerSelect={onWinnerSelect}
-                isAdmin={isAdmin}
-                currentUserId={currentUserId}
-                isSelected={selectedMatch?.id === match.id}
-                onMatchClick={onMatchClick}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-export const TournamentBracket: React.FC<BracketVisualizationProps> = ({
-  tournament,
-  bracket,
-  currentUserId,
-  onMatchClick,
-  onWinnerSelect,
-  isAdmin = false,
-  showAdminControls = false
-}) => {
-  const { state: authState } = useAuth();
-  const { balance } = useWallet();
-  const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
-  const [isAdvancing, setIsAdvancing] = useState<string | null>(null);
-
-  // Calculate bracket layout dimensions
-  const matchWidth = 280;
-  const matchHeight = 120;
-  const matchSpacingY = 40;
-  const roundSpacing = 120;
-  const bracketWidth = bracket.rounds.length * (matchWidth + roundSpacing);
-  const bracketHeight = Math.max(...bracket.rounds.map(r => r.matches.length)) * (matchHeight + matchSpacingY);
-
-  const handleMatchClick = (match: TournamentMatch) => {
-    setSelectedMatch(match);
-    onMatchClick && onMatchClick(match);
-  };
-
-  const handleWinnerSelect = async (matchId: string, winnerId: number) => {
-    if (!isAdmin || !onWinnerSelect) return;
-
-    setIsAdvancing(matchId);
-    try {
-      await onWinnerSelect(matchId, winnerId);
-    } catch (error) {
-      console.error('Failed to advance winner:', error);
-    } finally {
-      setIsAdvancing(null);
-    }
-  };
-
-  const getStatusInfo = () => {
-    switch (tournament.status) {
-      case 'open':
-        return { text: 'Registration Open', color: 'bg-green-100 text-green-800', icon: '📝' };
-      case 'in_progress':
-        return { text: 'Tournament Live', color: 'bg-blue-100 text-blue-800', icon: '🔥' };
-      case 'completed':
-        return { text: 'Completed', color: 'bg-gray-100 text-gray-800', icon: '🏆' };
-      case 'cancelled':
-        return { text: 'Cancelled', color: 'bg-red-100 text-red-800', icon: '❌' };
-      default:
-        return { text: 'Unknown', color: 'bg-gray-100 text-gray-800', icon: '❓' };
-    }
-  };
-
-  const statusInfo = getStatusInfo();
-  const currentUserEntry = tournament.entries?.find(entry => entry.user_id === currentUserId);
-  const userStatus = currentUserEntry?.status || 'not_joined';
-
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+    <div className="w-full bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 rounded-2xl p-6 border border-white/10">
       {/* Tournament Header */}
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex-1">
-            <div className="flex items-center space-x-3 mb-2">
-              <h2 className="text-2xl font-bold text-gray-900">{tournament.name}</h2>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
-                <span className="mr-1">{statusInfo.icon}</span>
-                {statusInfo.text}
-              </span>
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-600 flex items-center justify-center text-2xl shadow-lg">
+              🏆
             </div>
-            
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-gray-600">
-              <div>
-                <span className="font-medium">Game Type:</span>
-                <div className="capitalize">{tournament.game_type.replace('_', ' ')}</div>
-              </div>
-              <div>
-                <span className="font-medium">Format:</span>
-                <div className="capitalize">{tournament.format.replace('_', ' ')}</div>
-              </div>
-              <div>
-                <span className="font-medium">Entry Fee:</span>
-                <div className="text-green-600 font-semibold">KES {tournament.entry_fee.toFixed(2)}</div>
-              </div>
-              <div>
-                <span className="font-medium">Players:</span>
-                <div>{tournament.entries?.length || 0}/{tournament.max_players}</div>
-              </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">{tournamentName}</h2>
+              <p className="text-sm text-white/60">
+                {format === 'single_elimination' ? 'Single Elimination' : 'Double Elimination'} • Round {currentRound}
+              </p>
             </div>
           </div>
-
-          {/* User Status & Actions */}
-          <div className="mt-4 lg:mt-0 lg:ml-6">
-            {currentUserEntry ? (
-              <div className="text-right">
-                <div className="text-sm text-gray-600 mb-1">Your Status:</div>
-                <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  userStatus === 'winner' ? 'bg-yellow-100 text-yellow-800' :
-                  userStatus === 'eliminated' ? 'bg-red-100 text-red-800' :
-                  userStatus === 'active' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {userStatus === 'winner' ? '🏆 Champion' :
-                   userStatus === 'eliminated' ? '❌ Eliminated' :
-                   userStatus === 'active' ? '🎮 Active' :
-                   '👤 Registered'}
-                </div>
-              </div>
-            ) : tournament.status === 'open' ? (
-              <div className="text-right">
-                <div className="text-sm text-gray-600 mb-1">Entry Fee:</div>
-                <div className="text-green-600 font-bold text-lg">KES {tournament.entry_fee.toFixed(2)}</div>
-                <div className="text-xs text-gray-500">Your Balance: KES {balance.toFixed(2)}</div>
-              </div>
-            ) : null}
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <p className="text-xs text-white/50">Prize Pool</p>
+              <p className="text-lg font-bold text-green-400">${prizePool.toLocaleString()}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-white/50">Entry Fee</p>
+              <p className="text-lg font-bold text-white">${entryFee}</p>
+            </div>
           </div>
         </div>
-
-        {/* Admin Controls */}
-        {showAdminControls && isAdmin && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="flex flex-wrap gap-2">
-              {tournament.status === 'open' && (
-                <button className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors">
-                  Start Tournament
-                </button>
-              )}
-              {tournament.status === 'in_progress' && (
-                <button className="px-4 py-2 bg-yellow-500 text-white text-sm font-medium rounded-lg hover:bg-yellow-600 transition-colors">
-                  Pause Tournament
-                </button>
-              )}
-              <button className="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors">
-                Cancel Tournament
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Tournament Bracket */}
-      <div className="p-6">
-        {bracket && bracket.rounds.length > 0 ? (
-          <div className="overflow-x-auto">
-            <div className="min-w-max pb-4" style={{ width: bracketWidth }}>
-              <div className="flex space-x-8">
-                {bracket.rounds.map((round, roundIndex) => (
-                  <RoundColumn
-                    key={round.round}
-                    round={round}
-                    roundIndex={roundIndex}
-                    totalRounds={bracket.rounds.length}
-                    matchWidth={matchWidth}
-                    matchHeight={matchHeight}
-                    matchSpacingY={matchSpacingY}
-                    onWinnerSelect={handleWinnerSelect}
-                    isAdmin={isAdmin}
-                    currentUserId={currentUserId}
-                    selectedMatch={selectedMatch}
-                    onMatchClick={handleMatchClick}
+      {/* Bracket Container */}
+      <div 
+        className="overflow-x-auto pb-4"
+        style={{ minWidth: `${bracketWidth}px` }}
+      >
+        <div className="relative" style={{ width: `${bracketWidth}px`, height: `${bracketHeight}px` }}>
+          {/* Render each round */}
+          {rounds.map((round, roundIndex) => (
+            <div
+              key={roundIndex}
+              className="absolute top-0"
+              style={{ left: `${roundIndex * 280}px` }}
+            >
+              {/* Round Header */}
+              <div className="mb-4 px-4">
+                <h3 className="text-sm font-semibold text-white/80 text-center">
+                  {roundIndex === rounds.length - 1 ? '🏆 Finals' : 
+                   roundIndex === rounds.length - 2 ? 'Semi-Finals' :
+                   roundIndex === rounds.length - 3 ? 'Quarter-Finals' :
+                   `Round ${roundIndex + 1}`}
+                </h3>
+                {roundIndex === currentRound - 1 && (
+                  <span className="inline-block mt-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded-full">
+                    Current
+                  </span>
+                )}
+              </div>
+
+              {/* Matches in this round */}
+              <div className="flex flex-col gap-4">
+                {round.map((match) => (
+                  <MatchCard
+                    key={match.id}
+                    match={match}
+                    isHovered={hoveredMatch === match.id}
+                    onHover={(id) => setHoveredMatch(id)}
+                    onClick={() => onMatchClick?.(match)}
                   />
                 ))}
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="text-center py-12 text-gray-500">
-            <div className="text-4xl mb-4">🎯</div>
-            <h3 className="text-lg font-semibold mb-2">Tournament Bracket</h3>
-            <p className="text-sm">
-              {tournament.status === 'open' 
-                ? 'Tournament bracket will be generated when tournament starts'
-                : 'No bracket data available'
-              }
-            </p>
-          </div>
-        )}
+          ))}
+
+          {/* Connector lines (SVG overlay) */}
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            style={{ width: `${bracketWidth}px`, height: `${bracketHeight}px` }}
+          >
+            {renderConnectors(rounds)}
+          </svg>
+        </div>
       </div>
 
-      {/* Match Details Panel */}
-      {selectedMatch && (
-        <div className="border-t border-gray-200 bg-gray-50 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Match Details</h3>
-            <button
-              onClick={() => setSelectedMatch(null)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
+      {/* Legend */}
+      <div className="mt-6 flex items-center justify-center gap-6 text-xs text-white/50">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-green-500/20 border border-green-500/50"></div>
+          <span>Completed</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
+          <span>In Progress</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-white/5 border border-white/20"></div>
+          <span>Pending</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Match Info */}
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">Match Information</h4>
-                <div className="bg-white p-4 rounded-lg border">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600">Round:</span>
-                      <div className="font-medium">Round {selectedMatch.round}</div>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Status:</span>
-                      <div className="font-medium capitalize">{selectedMatch.status}</div>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Match ID:</span>
-                      <div className="font-mono text-xs">{selectedMatch.id}</div>
-                    </div>
-                    {selectedMatch.completed_at && (
-                      <div>
-                        <span className="text-gray-600">Completed:</span>
-                        <div className="font-medium">
-                          {new Date(selectedMatch.completed_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+/**
+ * Individual Match Card Component
+ */
+interface MatchCardProps {
+  match: Match;
+  isHovered: boolean;
+  onHover: (id: string | null) => void;
+  onClick: () => void;
+}
 
-              {/* Players */}
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">Players</h4>
-                <div className="space-y-2">
-                  {selectedMatch.player1_username && (
-                    <div className={`p-3 rounded-lg border ${
-                      selectedMatch.winner_id === selectedMatch.player1_id 
-                        ? 'bg-green-50 border-green-200' 
-                        : 'bg-white'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{selectedMatch.player1_username}</span>
-                        {selectedMatch.winner_id === selectedMatch.player1_id && (
-                          <span className="text-green-500">🏆 Winner</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {selectedMatch.player2_username && (
-                    <div className={`p-3 rounded-lg border ${
-                      selectedMatch.winner_id === selectedMatch.player2_id 
-                        ? 'bg-green-50 border-green-200' 
-                        : 'bg-white'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{selectedMatch.player2_username}</span>
-                        {selectedMatch.winner_id === selectedMatch.player2_id && (
-                          <span className="text-green-500">🏆 Winner</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+const MatchCard: React.FC<MatchCardProps> = ({
+  match,
+  isHovered,
+  onHover,
+  onClick
+}) => {
+  const getStatusColors = () => {
+    switch (match.status) {
+      case 'completed':
+        return 'border-green-500/30 bg-green-500/5';
+      case 'in_progress':
+        return 'border-yellow-500/30 bg-yellow-500/5';
+      default:
+        return 'border-white/10 bg-white/5';
+    }
+  };
 
-            {/* Actions */}
-            <div>
-              <h4 className="font-medium text-gray-700 mb-2">Actions</h4>
-              <div className="bg-white p-4 rounded-lg border space-y-3">
-                {isAdmin && selectedMatch.status === 'active' && selectedMatch.player1_id && selectedMatch.player2_id && (
-                  <div>
-                    <p className="text-sm text-gray-600 mb-2">Select match winner:</p>
-                    <div className="space-y-2">
-                      <button
-                        onClick={() => handleWinnerSelect(selectedMatch.id, selectedMatch.player1_id!)}
-                        disabled={isAdvancing === selectedMatch.id}
-                        className="w-full px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-                      >
-                        {isAdvancing === selectedMatch.id ? 'Advancing...' : `Advance ${selectedMatch.player1_username}`}
-                      </button>
-                      <button
-                        onClick={() => handleWinnerSelect(selectedMatch.id, selectedMatch.player2_id!)}
-                        disabled={isAdvancing === selectedMatch.id}
-                        className="w-full px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-                      >
-                        {isAdvancing === selectedMatch.id ? 'Advancing...' : `Advance ${selectedMatch.player2_username}`}
-                      </button>
-                    </div>
-                  </div>
-                )}
+  const getStatusIndicator = () => {
+    switch (match.status) {
+      case 'completed':
+        return <div className="w-2 h-2 rounded-full bg-green-500"></div>;
+      case 'in_progress':
+        return (
+          <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
+        );
+      default:
+        return <div className="w-2 h-2 rounded-full bg-white/20"></div>;
+    }
+  };
 
-                {selectedMatch.game_id && (
-                  <button className="w-full px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors">
-                    View Game Details
-                  </button>
-                )}
+  return (
+    <div
+      className={`
+        relative w-64 rounded-lg border transition-all duration-200 cursor-pointer
+        ${getStatusColors()}
+        ${isHovered ? 'border-purple-500/50 shadow-lg shadow-purple-500/10 scale-105' : ''}
+      `}
+      onMouseEnter={() => onHover(match.id)}
+      onMouseLeave={() => onHover(null)}
+      onClick={onClick}
+    >
+      {/* Status indicator */}
+      <div className="absolute top-2 right-2">
+        {getStatusIndicator()}
+      </div>
 
-                <button 
-                  onClick={() => setSelectedMatch(null)}
-                  className="w-full px-4 py-2 bg-gray-500 text-white text-sm font-medium rounded-lg hover:bg-gray-600 transition-colors"
-                >
-                  Close Details
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* Table number (if applicable) */}
+      {match.tableNumber && (
+        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-white/10 rounded text-[10px] text-white/60">
+          Table {match.tableNumber}
         </div>
       )}
 
-      {/* Loading State */}
-      {isAdvancing && (
-        <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg shadow-lg">
-            <div className="flex items-center space-x-3">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-              <span className="text-sm font-medium">Advancing winner...</span>
-            </div>
-          </div>
-        </div>
+      {/* Player 1 */}
+      <PlayerSlot
+        player={match.player1}
+        isWinner={match.winner?.id === match.player1?.id}
+        score={match.score?.player1}
+      />
+
+      {/* VS Divider */}
+      <div className="flex items-center justify-center py-1">
+        <div className="w-full h-px bg-white/10"></div>
+        <span className="px-2 text-[10px] text-white/30 font-medium">VS</span>
+        <div className="w-full h-px bg-white/10"></div>
+      </div>
+
+      {/* Player 2 */}
+      <PlayerSlot
+        player={match.player2}
+        isWinner={match.winner?.id === match.player2?.id}
+        score={match.score?.player2}
+      />
+    </div>
+  );
+};
+
+/**
+ * Player Slot Component
+ */
+interface PlayerSlotProps {
+  player: TournamentPlayer | null;
+  isWinner: boolean;
+  score?: number;
+}
+
+const PlayerSlot: React.FC<PlayerSlotProps> = ({
+  player,
+  isWinner,
+  score
+}) => {
+  return (
+    <div className={`
+      flex items-center gap-2 px-3 py-2 transition-colors
+      ${isWinner ? 'bg-yellow-500/10' : ''}
+      ${!player ? 'opacity-50' : ''}
+    `}>
+      {/* Seed number */}
+      <div className={`
+        w-5 h-5 rounded flex items-center justify-center text-[10px] font-medium
+        ${isWinner ? 'bg-yellow-500/30 text-yellow-400' : 'bg-white/10 text-white/40'}
+      `}>
+        {player?.seed || '-'}
+      </div>
+
+      {/* Avatar placeholder */}
+      <div className={`
+        w-6 h-6 rounded-full flex items-center justify-center text-xs
+        ${isWinner 
+          ? 'bg-gradient-to-br from-yellow-400 to-orange-500' 
+          : 'bg-gradient-to-br from-purple-500 to-pink-500'}
+      `}>
+        {player ? player.username.charAt(0).toUpperCase() : '?'}
+      </div>
+
+      {/* Username */}
+      <span className={`
+        flex-1 text-sm truncate font-medium
+        ${isWinner ? 'text-yellow-400' : player ? 'text-white' : 'text-white/30'}
+      `}>
+        {player?.username || 'TBD'}
+      </span>
+
+      {/* Score (if available) */}
+      {score !== undefined && (
+        <span className={`
+          text-sm font-bold px-2 py-0.5 rounded
+          ${isWinner ? 'bg-yellow-500/20 text-yellow-400' : 'bg-white/10 text-white/60'}
+        `}>
+          {score}
+        </span>
       )}
     </div>
   );
 };
+
+/**
+ * Render SVG connector lines between rounds
+ */
+function renderConnectors(rounds: Match[][]): React.ReactNode {
+  const connectors: React.ReactNode[] = [];
+  
+  for (let roundIndex = 0; roundIndex < rounds.length - 1; roundIndex++) {
+    const currentRound = rounds[roundIndex];
+    const nextRound = rounds[roundIndex + 1];
+    
+    for (let matchIndex = 0; matchIndex < nextRound.length; matchIndex++) {
+      const match1 = currentRound[matchIndex * 2];
+      const match2 = currentRound[matchIndex * 2 + 1];
+      const nextMatch = nextRound[matchIndex];
+      
+      if (!match1 || !match2 || !nextMatch) continue;
+      
+      const x1 = roundIndex * 280 + 256; // Right edge of current round
+      const x2 = (roundIndex + 1) * 280; // Left edge of next round
+      const midX = (x1 + x2) / 2;
+      
+      // Calculate Y positions (approximate based on match index)
+      const y1 = matchIndex * 100 + 60; // Top match center
+      const y2 = (matchIndex + 1) * 100 - 20; // Bottom match center
+      const midY = (y1 + y2) / 2;
+      
+      connectors.push(
+        <g key={`connector-${roundIndex}-${matchIndex}`}>
+          {/* Top match to middle */}
+          <path
+            d={`M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${midY}`}
+            fill="none"
+            stroke="rgba(255,255,255,0.1)"
+            strokeWidth="1"
+          />
+          {/* Bottom match to middle */}
+          <path
+            d={`M ${x1} ${y2} L ${midX} ${y2} L ${midX} ${midY}`}
+            fill="none"
+            stroke="rgba(255,255,255,0.1)"
+            strokeWidth="1"
+          />
+          {/* Middle to next match */}
+          <path
+            d={`M ${midX} ${midY} L ${x2} ${midY}`}
+            fill="none"
+            stroke="rgba(255,255,255,0.1)"
+            strokeWidth="1"
+          />
+        </g>
+      );
+    }
+  }
+  
+  return connectors;
+}
+
+/**
+ * Generate mock tournament data for demonstration
+ */
+export const generateMockTournament = (): TournamentBracketProps => {
+  const players: TournamentPlayer[] = [
+    { id: '1', username: 'ProPlayer123', seed: 1 },
+    { id: '2', username: 'PoolShark99', seed: 8 },
+    { id: '3', username: 'CueMaster', seed: 4 },
+    { id: '4', username: 'BreakKing', seed: 5 },
+    { id: '5', username: 'EightBallPro', seed: 2 },
+    { id: '6', username: 'TableRunner', seed: 7 },
+    { id: '7', username: 'SpinDoctor', seed: 3 },
+    { id: '8', username: 'PocketAce', seed: 6 },
+  ];
+
+  // Round 1 (Quarter-Finals)
+  const round1: Match[] = [
+    {
+      id: 'r1m1',
+      round: 1,
+      match: 1,
+      player1: players[0],
+      player2: players[1],
+      winner: players[0],
+      score: { player1: 7, player2: 3 },
+      status: 'completed',
+      tableNumber: 1
+    },
+    {
+      id: 'r1m2',
+      round: 1,
+      match: 2,
+      player1: players[2],
+      player2: players[3],
+      winner: players[2],
+      score: { player1: 7, player2: 5 },
+      status: 'completed',
+      tableNumber: 2
+    },
+    {
+      id: 'r1m3',
+      round: 1,
+      match: 3,
+      player1: players[4],
+      player2: players[5],
+      winner: players[4],
+      score: { player1: 7, player2: 2 },
+      status: 'completed',
+      tableNumber: 1
+    },
+    {
+      id: 'r1m4',
+      round: 1,
+      match: 4,
+      player1: players[6],
+      player2: players[7],
+      winner: players[6],
+      score: { player1: 7, player2: 4 },
+      status: 'completed',
+      tableNumber: 2
+    }
+  ];
+
+  // Round 2 (Semi-Finals)
+  const round2: Match[] = [
+    {
+      id: 'r2m1',
+      round: 2,
+      match: 1,
+      player1: players[0],
+      player2: players[2],
+      winner: null,
+      status: 'in_progress',
+      tableNumber: 1
+    },
+    {
+      id: 'r2m2',
+      round: 2,
+      match: 2,
+      player1: players[4],
+      player2: players[6],
+      winner: null,
+      status: 'pending',
+      tableNumber: 2
+    }
+  ];
+
+  // Round 3 (Finals)
+  const round3: Match[] = [
+    {
+      id: 'r3m1',
+      round: 3,
+      match: 1,
+      player1: null,
+      player2: null,
+      winner: null,
+      status: 'pending'
+    }
+  ];
+
+  return {
+    tournamentName: 'Weekend 8-Ball Championship',
+    format: 'single_elimination',
+    rounds: [round1, round2, round3],
+    currentRound: 2,
+    prizePool: 5000,
+    entryFee: 50
+  };
+};
+
+export default PoolTournamentBracket;

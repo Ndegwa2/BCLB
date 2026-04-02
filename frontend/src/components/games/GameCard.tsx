@@ -17,10 +17,12 @@ interface GameCardProps {
     max_players?: number
   }
   onJoin: (gameId: number) => void
+  onPlay: (gameId: number) => void
   onView: (gameId: number) => void
+  isJoined?: boolean
 }
 
-export const GameCard: React.FC<GameCardProps> = ({ game, onJoin, onView }) => {
+export const GameCard: React.FC<GameCardProps> = ({ game, onJoin, onPlay, onView, isJoined }) => {
   const { state: authState } = useAuth()
 
   // Determine game type icon and color
@@ -42,6 +44,7 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onJoin, onView }) => {
   const gameTypeInfo = getGameTypeInfo(game.game_type)
   const isFull = (game.player_count || 1) >= (game.max_players || 2)
   const isCreator = authState.user?.id === game.creator_id
+  const canPlay = isCreator || isJoined
 
   // Determine status badge
   const getStatusBadge = () => {
@@ -84,7 +87,9 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onJoin, onView }) => {
         {/* Stake */}
         <div className="md:col-span-1">
           <div className="font-mono text-sm text-gray-500">Stake</div>
-          <div className="font-bold text-green-600">KES {game.stake_amount.toFixed(2)}</div>
+          <div className="font-bold text-green-600">
+            {game.stake_amount === 0 ? 'Free' : `KES ${game.stake_amount.toFixed(2)}`}
+          </div>
         </div>
 
         {/* Players */}
@@ -126,7 +131,14 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onJoin, onView }) => {
 
         {/* Actions */}
         <div className="md:col-span-1 flex justify-end space-x-2">
-          {game.status === 'waiting' && !isFull && !isCreator ? (
+          {canPlay ? (
+            <button
+              onClick={() => onPlay(game.id)}
+              className="px-3 py-1 bg-green-500 text-white text-sm font-medium rounded-md hover:bg-green-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
+            >
+              Play Now
+            </button>
+          ) : game.status === 'waiting' && !isFull && !isCreator ? (
             <button
               onClick={() => onJoin(game.id)}
               className="px-3 py-1 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"

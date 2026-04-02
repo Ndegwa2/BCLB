@@ -27,7 +27,9 @@ const Login: React.FC = () => {
 
     try {
       await login(formData)
-      navigate('/dashboard')
+      // Navigation will be handled by the route guard based on user role
+      // The /dashboard route in App.tsx will show AdminDashboard or Dashboard
+      // based on state.user?.is_admin
     } catch (error) {
       // Error is handled by AuthContext
       console.error('Login failed:', error)

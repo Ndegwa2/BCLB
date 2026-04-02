@@ -4,14 +4,15 @@ import { AuthProvider } from './contexts/AuthContext'
 import { WalletProvider } from './contexts/WalletContext'
 import { GameProvider } from './contexts/GameContext'
 import { NotificationProvider } from './contexts/NotificationContext'
+import { Toaster } from 'sonner'
 import MainLayout from './components/layout/MainLayout'
 
 // Pages
-import Login from './pages/Login'
-import Register from './pages/Register'
+import AuthPage from './pages/AuthPage'
 import Dashboard from './pages/Dashboard'
 import Games from './pages/Games'
 import GamePlay from './pages/GamePlay'
+import PlayVsAI from './pages/PlayVsAI'
 import Tournaments from './pages/Tournaments'
 import Wallet from './pages/Wallet'
 import Profile from './pages/Profile'
@@ -31,11 +32,9 @@ import './styles/globals.css'
 
 
 
-const LayoutWrapper: React.FC<{ children: React.ReactNode, title?: string }> = ({ children, title }) => {
-  const { state } = useAuth()
-
+const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <MainLayout title={title}>
+    <MainLayout>
       {children}
     </MainLayout>
   )
@@ -53,15 +52,17 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <Routes>
-      {/* Public routes */}
-      <Route path="/login" element={!state.isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} />
-      <Route path="/register" element={!state.isAuthenticated ? <Register /> : <Navigate to="/dashboard" />} />
+    <>
+      <Toaster position="top-right" richColors closeButton />
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={!state.isAuthenticated ? <AuthPage /> : <Navigate to={state.user?.is_admin ? "/admin" : "/dashboard"} />} />
+        <Route path="/register" element={!state.isAuthenticated ? <AuthPage /> : <Navigate to={state.user?.is_admin ? "/admin" : "/dashboard"} />} />
 
       {/* Protected routes with layout */}
       <Route path="/dashboard" element={
         <AuthGuard>
-          <LayoutWrapper title="Dashboard">
+          <LayoutWrapper>
             {state.user?.is_admin ? <AdminDashboard /> : <Dashboard />}
           </LayoutWrapper>
         </AuthGuard>
@@ -69,7 +70,7 @@ const AppContent: React.FC = () => {
 
       <Route path="/games" element={
         <AuthGuard>
-          <LayoutWrapper title="Games">
+          <LayoutWrapper>
             <Games />
           </LayoutWrapper>
         </AuthGuard>
@@ -77,15 +78,23 @@ const AppContent: React.FC = () => {
 
       <Route path="/games/play/:gameId" element={
         <AuthGuard>
-          <LayoutWrapper title="Game Play">
+          <LayoutWrapper>
             <GamePlay />
+          </LayoutWrapper>
+        </AuthGuard>
+      } />
+
+      <Route path="/play-vs-ai" element={
+        <AuthGuard>
+          <LayoutWrapper>
+            <PlayVsAI />
           </LayoutWrapper>
         </AuthGuard>
       } />
 
       <Route path="/tournaments" element={
         <AuthGuard>
-          <LayoutWrapper title="Tournaments">
+          <LayoutWrapper>
             <Tournaments />
           </LayoutWrapper>
         </AuthGuard>
@@ -93,7 +102,7 @@ const AppContent: React.FC = () => {
 
       <Route path="/wallet" element={
         <AuthGuard>
-          <LayoutWrapper title="Wallet">
+          <LayoutWrapper>
             <Wallet />
           </LayoutWrapper>
         </AuthGuard>
@@ -101,7 +110,7 @@ const AppContent: React.FC = () => {
 
       <Route path="/profile" element={
         <AuthGuard>
-          <LayoutWrapper title="Profile">
+          <LayoutWrapper>
             <Profile />
           </LayoutWrapper>
         </AuthGuard>
@@ -110,35 +119,35 @@ const AppContent: React.FC = () => {
       {/* Admin Routes - redirect to dashboard for admin users */}
       <Route path="/admin" element={
         <AuthGuard requireAdmin={true}>
-          <LayoutWrapper title="Admin Dashboard">
+          <LayoutWrapper>
             <AdminDashboard />
           </LayoutWrapper>
         </AuthGuard>
       } />
       <Route path="/admin/users" element={
         <AuthGuard requireAdmin={true}>
-          <LayoutWrapper title="Users Management">
+          <LayoutWrapper>
             <AdminDashboard />
           </LayoutWrapper>
         </AuthGuard>
       } />
       <Route path="/admin/games" element={
         <AuthGuard requireAdmin={true}>
-          <LayoutWrapper title="Games Management">
+          <LayoutWrapper>
             <AdminDashboard />
           </LayoutWrapper>
         </AuthGuard>
       } />
       <Route path="/admin/tournaments" element={
         <AuthGuard requireAdmin={true}>
-          <LayoutWrapper title="Tournaments Management">
+          <LayoutWrapper>
             <AdminDashboard />
           </LayoutWrapper>
         </AuthGuard>
       } />
       <Route path="/admin/wallet" element={
         <AuthGuard requireAdmin={true}>
-          <LayoutWrapper title="Wallet Management">
+          <LayoutWrapper>
             <AdminDashboard />
           </LayoutWrapper>
         </AuthGuard>
@@ -146,31 +155,37 @@ const AppContent: React.FC = () => {
 
       {/* Redirect root to appropriate page */}
       <Route path="/" element={
-        <Navigate to={state.isAuthenticated ? "/dashboard" : "/login"} />
+        <Navigate to={state.isAuthenticated ? (state.user?.is_admin ? "/admin" : "/dashboard") : "/login"} />
       } />
 
-      {/* 404 page */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        {/* 404 page */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
   )
 }
 
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <Router>
-        <AuthProvider>
-          <WalletProvider>
-            <GameProvider>
-              <NotificationProvider>
-                <div className="App">
-                  <AppContent />
-                </div>
-              </NotificationProvider>
-            </GameProvider>
-          </WalletProvider>
-        </AuthProvider>
-      </Router>
+      <Router
+                future={{
+                  v7_startTransition: true,
+                  v7_relativeSplatPath: true,
+                }}
+              >
+                <AuthProvider>
+                  <WalletProvider>
+                    <GameProvider>
+                      <NotificationProvider>
+                        <div className="App">
+                          <AppContent />
+                        </div>
+                      </NotificationProvider>
+                    </GameProvider>
+                  </WalletProvider>
+                </AuthProvider>
+              </Router>
     </ErrorBoundary>
   )
 }

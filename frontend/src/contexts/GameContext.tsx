@@ -12,6 +12,10 @@ interface Game {
   total_pot: number
   created_at: string
   creator_id: number
+  allow_ai?: boolean
+  ai_opponent_id?: number
+  opponent_type?: 'human' | 'ai'
+  ai_difficulty?: 'easy' | 'medium' | 'hard'
   my_entry?: {
     id: number
     result: 'win' | 'loss'
@@ -21,10 +25,22 @@ interface Game {
   entries?: GameEntry[]
 }
 
+interface Tournament {
+  id: number
+  name: string
+  game_type: string
+  entry_fee: number
+  max_players: number
+  status: string
+  format: string
+  created_at: string
+  updated_at: string
+}
+
 interface GameContextType {
   gameHistory: Game[]
   activeGames: Game[]
-  upcomingTournaments: any[]
+  upcomingTournaments: Tournament[]
   loading: boolean
   error: string | null
   refreshGameData: () => Promise<void>
@@ -37,7 +53,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { state: authState } = useAuth()
   const [gameHistory, setGameHistory] = useState<Game[]>([])
   const [activeGames, setActiveGames] = useState<Game[]>([])
-  const [upcomingTournaments, setUpcomingTournaments] = useState<any[]>([])
+  const [upcomingTournaments, setUpcomingTournaments] = useState<Tournament[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,16 +62,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     try {
       const response = await apiClient.get('/games/mine?limit=10')
-      const data = response.data
+      // Handle different response structures
+      const games = response?.games || response?.data?.games || []
       
       // Filter for completed games (game history)
-      const completed = data.games?.filter((game: Game) => game.status === 'completed') || []
+      const completed = games.filter((game: Game) => game.status === 'completed')
       setGameHistory(completed)
       
       // Filter for active games (in_progress, waiting)
-      const active = data.games?.filter((game: Game) =>
+      const active = games.filter((game: Game) =>
         ['in_progress', 'waiting'].includes(game.status)
-      ) || []
+      )
       setActiveGames(active)
       
     } catch (err: any) {
@@ -67,24 +84,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!authState.isAuthenticated) return
     
     try {
-      // Get upcoming tournaments - this would need to be implemented
-      // For now, returning mock data
-      setUpcomingTournaments([
-        {
-          id: 1,
-          name: 'Weekly Poker Championship',
-          date: '2025-11-30',
-          prize: '$100'
-        },
-        {
-          id: 2,
-          name: 'Chess Masters Tournament',
-          date: '2025-12-05',
-          prize: '$75'
-        }
-      ])
+      // Fetch upcoming open tournaments from API
+      const response = await apiClient.get('/tournaments/open', { params: { limit: 10 } })
+      const tournaments = response?.tournaments || response?.data?.tournaments || []
+      // Filter for open tournaments only and limit to 5
+      const openTournaments = tournaments.filter((t: Tournament) => t.status === 'open').slice(0, 5)
+      setUpcomingTournaments(openTournaments)
     } catch (err: any) {
       console.error('Tournaments fetch error:', err)
+      // Set empty array on error - no mock data
+      setUpcomingTournaments([])
     }
   }
 

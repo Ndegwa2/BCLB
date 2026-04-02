@@ -81,7 +81,9 @@ const Register: React.FC = () => {
       }
       
       await register(credentials)
-      navigate('/dashboard')
+      // Navigation is handled by route guard based on user role
+      // The /dashboard route in App.tsx will show AdminDashboard or Dashboard
+      // based on state.user?.is_admin
     } catch (error) {
       // Error is handled by AuthContext
       console.error('Registration failed:', error)

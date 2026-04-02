@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWallet } from '../../contexts/WalletContext'
+import { useGame } from '../../contexts/GameContext'
 import { apiClient } from '../../services/api'
 
 const gameTypes = [
@@ -19,6 +21,8 @@ const aiDifficulties = [
 export const CreateGameForm: React.FC = () => {
   const { state: authState } = useAuth()
   const { balance } = useWallet()
+  const { refreshGameData } = useGame()
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
   const [selectedGameType, setSelectedGameType] = useState('draw_1v1')
   const [stakeAmount, setStakeAmount] = useState('100')
@@ -27,6 +31,7 @@ export const CreateGameForm: React.FC = () => {
   const [aiDifficulty, setAiDifficulty] = useState('medium')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [createdGameId, setCreatedGameId] = useState<number | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,11 +46,11 @@ export const CreateGameForm: React.FC = () => {
     try {
       const amount = parseFloat(stakeAmount)
       if (amount < 0) {
-        setError('Stake amount must be positive')
+        setError('Stake amount must be non-negative')
         return
       }
 
-      if (!isFree && amount > balance) {
+      if (!isFree && amount > 0 && amount > balance) {
         setError('Insufficient balance')
         return
       }
@@ -61,16 +66,29 @@ export const CreateGameForm: React.FC = () => {
           ai_difficulty: allowAI ? aiDifficulty : undefined
         }
 
-        const response = await apiClient.post('/games', gameData)
-        const game = response.data.game
+        // apiClient already returns response.data, so we access directly
+        const responseData = await apiClient.post('/games', gameData)
+        const game = responseData.game || responseData.data?.game
         
         setSuccess(`Game created successfully! Game code: ${game.game_code}`)
+        setCreatedGameId(game.id)
         
-        // Reset form
+        // Refresh game data to include the new game in activeGames
+        await refreshGameData()
+        
+        // Reset form fields but keep success message visible
         setStakeAmount('100')
         setIsFree(false)
         setAllowAI(false)
         setAiDifficulty('medium')
+        
+        // Scroll to success message after a brief delay to ensure DOM update
+        setTimeout(() => {
+          const successElement = document.getElementById('success-message')
+          if (successElement) {
+            successElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 100)
       } catch (error: any) {
         console.error('Error creating game:', error)
         setError(error.response?.data?.error || 'Failed to create game')
@@ -93,8 +111,39 @@ export const CreateGameForm: React.FC = () => {
       )}
 
       {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4">
-          {success}
+        <div id="success-message" className="bg-green-50 border-2 border-green-400 text-green-800 px-6 py-4 rounded-lg mb-6 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">✅</span>
+              <div>
+                <p className="font-bold text-lg">{success}</p>
+                <p className="text-sm text-green-600 mt-1">Your game is ready! Click "Play Now" to start.</p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              {createdGameId && (
+                <button
+                  onClick={() => navigate(`/games/play/${createdGameId}`)}
+                  className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white text-base font-bold py-3 px-6 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
+                >
+                  <span className="text-xl">🎮</span>
+                  Play Now
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  const gameCode = success.split('Game code: ')[1] || ''
+                  if (gameCode) {
+                    navigator.clipboard.writeText(gameCode)
+                    alert('Game code copied to clipboard!')
+                  }
+                }}
+                className="bg-gray-600 hover:bg-gray-700 active:bg-gray-800 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-1"
+              >
+                📋 Copy Code
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -133,9 +182,11 @@ export const CreateGameForm: React.FC = () => {
                 min="0"
                 step="10"
                 disabled={isFree}
+                placeholder="0 for free game"
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
               />
             </div>
+            <p className="mt-1 text-xs text-gray-500">Enter 0 to create a free game (no stake required)</p>
           </div>
         </div>
 
@@ -145,13 +196,31 @@ export const CreateGameForm: React.FC = () => {
             type="checkbox"
             id="free-game"
             checked={isFree}
-            onChange={(e) => setIsFree(e.target.checked)}
+            onChange={(e) => {
+              setIsFree(e.target.checked)
+              if (e.target.checked) {
+                setStakeAmount('0')
+              }
+            }}
             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
           />
           <label htmlFor="free-game" className="ml-2 block text-sm text-gray-700">
             Create as free game (no stake required)
           </label>
         </div>
+        
+        {/* 0 Stake Info */}
+        {parseFloat(stakeAmount) === 0 && !isFree && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🎮</span>
+              <div>
+                <p className="font-medium">Free Game Mode</p>
+                <p className="text-sm">This game will have no stake - perfect for practice or casual play!</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* AI Opponent Toggle */}
         <div className="flex items-center">

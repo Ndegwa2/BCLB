@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../services/api'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 
@@ -15,6 +16,7 @@ interface UserProfile {
 
 const Profile: React.FC = () => {
   const { state: authState, logout } = useAuth()
+  const navigate = useNavigate()
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -103,7 +105,7 @@ const Profile: React.FC = () => {
         return
       }
 
-      const response = await apiClient.patch('/auth/profile', updateData)
+      await apiClient.patch('/auth/profile', updateData)
 
       setOperationStatus({ type: 'success', message: 'Profile updated successfully' })
       setEditMode(false)
@@ -130,7 +132,7 @@ const Profile: React.FC = () => {
       setLoading(true)
       setError(null)
 
-      const response = await apiClient.post('/auth/change-password', {
+      await apiClient.post('/auth/change-password', {
         current_password: passwordData.current_password,
         new_password: passwordData.new_password
       })
@@ -182,7 +184,7 @@ const Profile: React.FC = () => {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Please login to view your profile</h2>
           <button
-            onClick={() => window.location.href = '/login'}
+            onClick={() => navigate('/login')}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Go to Login
@@ -427,35 +429,35 @@ const Profile: React.FC = () => {
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
 
                   <div className="space-y-3">
-                    <a
-                      href="/wallet"
-                      className="block w-full flex justify-between items-center px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded-md text-left"
+                    <button
+                      onClick={() => navigate('/wallet')}
+                      className="w-full flex justify-between items-center px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded-md text-left"
                     >
                       <span>View Wallet</span>
                       <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                       </svg>
-                    </a>
+                    </button>
 
-                    <a
-                      href="/games"
-                      className="block w-full flex justify-between items-center px-3 py-2 bg-green-50 hover:bg-green-100 rounded-md text-left"
+                    <button
+                      onClick={() => navigate('/games')}
+                      className="w-full flex justify-between items-center px-3 py-2 bg-green-50 hover:bg-green-100 rounded-md text-left"
                     >
                       <span>Play Games</span>
                       <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
                       </svg>
-                    </a>
+                    </button>
 
-                    <a
-                      href="/tournaments"
-                      className="block w-full flex justify-between items-center px-3 py-2 bg-purple-50 hover:bg-purple-100 rounded-md text-left"
+                    <button
+                      onClick={() => navigate('/tournaments')}
+                      className="w-full flex justify-between items-center px-3 py-2 bg-purple-50 hover:bg-purple-100 rounded-md text-left"
                     >
                       <span>Join Tournaments</span>
                       <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                    </a>
+                    </button>
                   </div>
                 </div>
               </div>

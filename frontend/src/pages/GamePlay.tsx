@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGame } from '../contexts/GameContext';
 import { apiClient } from '../services/api';
@@ -14,49 +14,58 @@ const GamePlay: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [game, setGame] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [gameLoaded, setGameLoaded] = useState(false);
+  const gameLoadedRef = useRef(false);
 
   const loadGame = useCallback(async () => {
-    if (!gameId || gameLoaded) return;
+    if (!gameId || gameLoadedRef.current) return;
     
     // First try to find in active games
     const foundGame = activeGames.find(g => g.id === Number(gameId));
     
     if (foundGame) {
       setGame(foundGame);
-      setGameLoaded(true);
+      gameLoadedRef.current = true;
       setLoading(false);
       return;
     }
     
     // If not found, fetch it directly from API
     try {
-      await refreshGameData();
-      setGameLoaded(true);
+      // apiClient already returns response.data, so we access directly
+      const responseData = await apiClient.get(`/games/${gameId}`);
+      if (responseData && responseData.game) {
+        setGame(responseData.game);
+        gameLoadedRef.current = true;
+      } else {
+        // Refresh game data and try again
+        await refreshGameData();
+        gameLoadedRef.current = true;
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to load game');
-      setGameLoaded(true);
+      gameLoadedRef.current = true;
     } finally {
       setLoading(false);
     }
-  }, [gameId, activeGames, refreshGameData, gameLoaded]);
+  }, [gameId, activeGames, refreshGameData]);
 
   // Run loadGame when gameId changes or when activeGames is updated
   useEffect(() => {
-    if (!gameLoaded) {
+    if (!gameLoadedRef.current) {
       loadGame();
     }
-  }, [gameId, activeGames, loadGame, gameLoaded]);
+  }, [gameId, activeGames, loadGame]);
 
-  // Check activeGames after refresh to set game
+  // Also try to find game in activeGames when it updates
   useEffect(() => {
-    if (gameLoaded && !game && !error && gameId) {
+    if (!game && gameId && activeGames.length > 0) {
       const foundGame = activeGames.find(g => g.id === Number(gameId));
       if (foundGame) {
         setGame(foundGame);
+        setLoading(false);
       }
     }
-  }, [gameLoaded, activeGames, game, error, gameId]);
+  }, [activeGames, gameId, game]);
 
   if (loading) {
     return (

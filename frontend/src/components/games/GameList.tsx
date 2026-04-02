@@ -28,7 +28,7 @@ export const GameList: React.FC = () => {
   const [filter, setFilter] = useState<'all' | 'draw_1v1' | 'pool_8ball' | 'card_blackjack' | 'poker_texas_holdem'>('all')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
-  const [joiningGameId, setJoiningGameId] = useState<number | null>(null)
+  const [joinedGameIds, setJoinedGameIds] = useState<Set<number>>(new Set())
   const navigate = useNavigate()
   const { state: authState } = useAuth()
 
@@ -51,10 +51,11 @@ export const GameList: React.FC = () => {
           ...(filter !== 'all' && { game_type: filter })
         })
 
-        const response = await apiClient.get(`/games/open?${params}`)
+        // apiClient already returns response.data, so we access directly
+        const responseData = await apiClient.get(`/games/open?${params}`)
 
-        setGames(response.data.games || [])
-        setTotalPages(response.data.pagination?.pages || 1)
+        setGames(responseData.games || [])
+        setTotalPages(responseData.pagination?.pages || 1)
 
       } catch (err: any) {
         setError(err.response?.data?.error || err.message || 'Failed to fetch games')
@@ -80,9 +81,9 @@ export const GameList: React.FC = () => {
         })
 
         apiClient.get(`/games/open?${params}`)
-          .then(response => {
-            setGames(response.data.games || [])
-            setTotalPages(response.data.pagination?.pages || 1)
+          .then(responseData => {
+            setGames(responseData.games || [])
+            setTotalPages(responseData.pagination?.pages || 1)
           })
           .catch(err => {
             console.warn('Auto-refresh failed:', err)
@@ -122,7 +123,6 @@ export const GameList: React.FC = () => {
     }
 
     try {
-      setJoiningGameId(gameId)
       setError(null)
 
       // Debug: Check authentication state
@@ -130,10 +130,12 @@ export const GameList: React.FC = () => {
       console.log('Auth state:', authState)
       console.log('Token exists:', !!authState.token)
 
-      const response = await apiClient.post(`/games/${gameId}/join`)
+      
+      // Track that user has joined this game
+      setJoinedGameIds(prev => new Set(prev).add(gameId))
       
       // Navigate to the game play page
-      navigate(`/games/${gameId}/play`)
+      navigate(`/games/play/${gameId}`)
       
     } catch (err: any) {
       console.error('Join error details:', {
@@ -160,8 +162,10 @@ export const GameList: React.FC = () => {
       // Provide specific error messages for different scenarios
       if (errorMessage === 'Already joined this game') {
         setError('You have already joined this game. Redirecting to the game...')
+        // Track that user has joined this game
+        setJoinedGameIds(prev => new Set(prev).add(gameId))
         // Redirect to the game after a short delay
-        setTimeout(() => navigate(`/games/${gameId}/play`), 2000)
+        setTimeout(() => navigate(`/games/play/${gameId}`), 2000)
       } else if (errorMessage === 'Game is full') {
         setError('This game is already full. Please join a different game.')
       } else if (errorMessage === 'Game is not available to join') {
@@ -180,9 +184,11 @@ export const GameList: React.FC = () => {
       } else {
         setError(`Failed to join game: ${errorMessage}`)
       }
-    } finally {
-      setJoiningGameId(null)
     }
+  }
+
+  const handlePlay = (gameId: number) => {
+    navigate(`/games/play/${gameId}`)
   }
 
   const handleView = (gameId: number) => {
@@ -264,7 +270,9 @@ export const GameList: React.FC = () => {
                 key={game.id}
                 game={game}
                 onJoin={handleJoin}
+                onPlay={handlePlay}
                 onView={handleView}
+                isJoined={joinedGameIds.has(game.id)}
               />
             ))}
           </div>

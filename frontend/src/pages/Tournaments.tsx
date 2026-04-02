@@ -2,9 +2,11 @@ import React from 'react'
 import { CreateTournamentForm } from '../components/tournaments/CreateTournamentForm'
 import { TournamentList } from '../components/tournaments/TournamentList'
 import { useAuth } from '../contexts/AuthContext'
+import { useWallet } from '../contexts/WalletContext'
 
 const Tournaments: React.FC = () => {
   const { state: authState } = useAuth()
+  const { balance } = useWallet()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -30,7 +32,7 @@ const Tournaments: React.FC = () => {
             {authState.isAuthenticated && (
               <div className="mt-4 md:mt-0 bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
                 <span className="text-sm text-gray-600">Your Balance: </span>
-                <span className="font-bold text-green-600">KES 1,250.00</span>
+                <span className="font-bold text-green-600">KES {balance.toFixed(2)}</span>
               </div>
             )}
           </div>
