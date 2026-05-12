@@ -3,9 +3,8 @@ AI opponent service for making intelligent game decisions
 """
 
 import random
-import math
-from typing import Dict, Any, List, Tuple, Optional
-from datetime import datetime
+from typing import Dict, Any
+from datetime import datetime, timezone
 
 class AIOpponent:
     """AI opponent that can play different game types with enhanced decision-making"""
@@ -75,7 +74,7 @@ class AIOpponent:
         self.move_history.append({
             'game_type': game_type,
             'move': move,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now().isoformat()
         })
         
         # Keep only last 20 moves
@@ -228,18 +227,48 @@ class AIOpponent:
     
     def reset_history(self):
         """Reset move history for new game"""
-        self.move_history = []
-        self.opponent_patterns = {}
+        self.move_history: list[dict] = []
+        self.opponent_patterns: dict = {}
     
     def _make_pool_move(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
-        """AI decision for pool game"""
-        # For now, simple strategic moves
+        """AI decision for pool game using physics simulation"""
+        # Initialize physics engine if not provided
+        physics_engine = game_state.get('physics_engine')
+        if not physics_engine:
+            # Import here to avoid circular imports
+            from .pool_physics import PoolPhysicsEngine
+            physics_engine = PoolPhysicsEngine()
+            # Restore game state from provided data
+            if 'balls' in game_state:
+                physics_engine.set_game_state({
+                    'balls': game_state['balls']
+                })
+
+        current_player_group = game_state.get('current_player_group')
+
+        # Use physics-based AI for strategic decisions
+        if physics_engine and current_player_group:
+            best_shot = physics_engine.find_best_physics_shot(current_player_group, self.difficulty)
+            if best_shot:
+                return {
+                    'action': 'shoot',
+                    'target_x': best_shot['target_x'],
+                    'target_y': best_shot['target_y'],
+                    'angle': best_shot['angle'],
+                    'power': best_shot['power'],
+                    'ball_number': best_shot['ball_number'],
+                    'ball_type': best_shot['ball_type'],
+                    'is_safe': best_shot['is_safe'],
+                    'confidence': self._get_confidence_from_score(best_shot['score'])
+                }
+
+        # Fallback to basic AI if physics simulation fails
         available_balls = game_state.get('available_balls', [])
         current_player = game_state.get('current_player', 1)
-        
+
         if not available_balls:
             return {'action': 'break', 'power': random.uniform(0.7, 1.0)}
-        
+
         # Choose target ball based on difficulty
         if self.difficulty == 'hard':
             # Hard AI tries to pocket balls strategically
@@ -253,13 +282,20 @@ class AIOpponent:
             # Easy AI makes random choices
             target_ball = random.choice(available_balls) if available_balls else None
             power = random.uniform(0.4, 0.8)
-        
+
         return {
             'action': 'shoot',
             'target_ball': target_ball,
             'power': power,
             'angle': random.uniform(0, 360)
         }
+
+    def _get_confidence_from_score(self, score: float) -> float:
+        """Convert physics score to confidence rating"""
+        # Normalize score to 0-1 confidence range
+        # Scores can range from -500 (terrible) to +150 (excellent)
+        normalized = (score + 500) / 650  # Shift and scale
+        return max(0.1, min(0.95, normalized))
     
     def _make_blackjack_move(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
         """AI decision for blackjack game"""

@@ -1,9 +1,8 @@
-from flask_sqlalchemy import SQLAlchemy
-
-# Initialize SQLAlchemy
-db = SQLAlchemy()
+# Import db from extensions module to avoid circular imports
+from .extensions import db
 
 # Import all models to ensure they're registered with SQLAlchemy
+# Note: These imports must come after db is defined to avoid circular imports
 from .user import User
 from .transaction import WalletTransaction
 from .wallet import Payment

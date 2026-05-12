@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import bcrypt
-from ..models import db
+from .extensions import db
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -13,8 +13,8 @@ class User(db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     is_ai = db.Column(db.Boolean, default=False)
     ai_difficulty = db.Column(db.String(20), default='medium')  # 'easy', 'medium', 'hard'
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     wallet_transactions = db.relationship('WalletTransaction', backref='user', lazy=True)

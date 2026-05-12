@@ -28,7 +28,6 @@ class APICache {
     '/admin/overview': 30000,   // 30 seconds
     '/admin/stats': 60000,      // 1 minute
     '/admin/users': 30000,      // 30 seconds
-    '/admin/games': 30000,      // 30 seconds
     '/tournaments': 15000,      // 15 seconds
   };
 

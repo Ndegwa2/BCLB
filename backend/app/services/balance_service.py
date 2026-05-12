@@ -2,7 +2,8 @@
 Centralized balance service with caching.
 Eliminates redundant balance calculations across routes.
 """
-from ..models import WalletTransaction, db
+from ..models import WalletTransaction
+from ..models.extensions import db
 from ..middleware.cache import query_cache, cached
 from sqlalchemy import func
 import logging

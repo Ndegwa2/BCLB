@@ -27,9 +27,6 @@ import ErrorBoundary from './components/ErrorBoundary'
 // Hooks
 import { useAuth } from './contexts/AuthContext'
 
-// Styles
-import './styles/globals.css'
-
 
 
 const LayoutWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -125,13 +122,6 @@ const AppContent: React.FC = () => {
         </AuthGuard>
       } />
       <Route path="/admin/users" element={
-        <AuthGuard requireAdmin={true}>
-          <LayoutWrapper>
-            <AdminDashboard />
-          </LayoutWrapper>
-        </AuthGuard>
-      } />
-      <Route path="/admin/games" element={
         <AuthGuard requireAdmin={true}>
           <LayoutWrapper>
             <AdminDashboard />

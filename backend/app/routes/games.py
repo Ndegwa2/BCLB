@@ -1,15 +1,17 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import Game, GameEntry, User, WalletTransaction, db
+from ..models import Game, GameEntry, User, WalletTransaction
+from ..models.extensions import db
 from ..auth import require_auth
 from ..services.ai_opponent import get_ai_opponent
 from ..services.balance_service import balance_service
+from ..services.pool_physics import PoolPhysicsEngine
 from ..middleware.rate_limiter import rate_limit
 from ..middleware.cache import query_cache, cache_response
-from sqlalchemy import func
 import random
 import string
 import math
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 
 games_bp = Blueprint('games', __name__, url_prefix='/api/games')
 
@@ -54,14 +56,13 @@ def create_game():
             return jsonify({'error': 'Insufficient balance'}), 402
 
         # Deduct stake amount (create wallet transaction)
-        wallet_tx = WalletTransaction(
-            amount=stake_amount,
-            direction='debit',
-            tx_type='game_stake',
-            status='success',
-            description=f'Game stake ({game_type})',
-            user_id=user.id
-        )
+        wallet_tx = WalletTransaction()
+        wallet_tx.amount = stake_amount
+        wallet_tx.direction = 'debit'
+        wallet_tx.tx_type = 'game_stake'
+        wallet_tx.status = 'success'
+        wallet_tx.description = f'Game stake ({game_type})'
+        wallet_tx.user_id = user.id
         db.session.add(wallet_tx)
 
     # Generate unique game code
@@ -84,11 +85,11 @@ def create_game():
     db.session.flush()  # Get the game ID
 
     # Create game entry for creator
-    entry = GameEntry(
+    entry: GameEntry = GameEntry(
         user_id=user.id,
         game_id=game.id,
         stake_amount=stake_amount,
-        joined_at=datetime.utcnow()
+        joined_at=datetime.now(timezone.utc)
     )
 
     db.session.add(entry)
@@ -99,11 +100,11 @@ def create_game():
         ai_bot = User.query.filter_by(is_ai=True, ai_difficulty=ai_difficulty).first()
         if ai_bot:
             # Create game entry for AI opponent
-            ai_entry = GameEntry(
+            ai_entry: GameEntry = GameEntry(
                 user_id=ai_bot.id,
                 game_id=game.id,
                 stake_amount=stake_amount,
-                joined_at=datetime.utcnow()
+                joined_at=datetime.now(timezone.utc)
             )
             db.session.add(ai_entry)
             
@@ -165,7 +166,7 @@ def get_open_games():
 @games_bp.route('/<int:game_id>/join', methods=['POST'])
 @require_auth
 @rate_limit
-def join_game(game_id):
+def join_game(game_id: int):
     """Join game with cached balance check"""
     user = g.current_user
     
@@ -210,11 +211,11 @@ def join_game(game_id):
     # For 0 stake games, no balance check or transaction needed
 
     # Create game entry
-    entry = GameEntry(
+    entry: GameEntry = GameEntry(
         user_id=user.id,
         game_id=game_id,
         stake_amount=game.stake_amount,
-        joined_at=datetime.utcnow()
+        joined_at=datetime.now(timezone.utc)
     )
 
     db.session.add(entry)
@@ -231,7 +232,7 @@ def join_game(game_id):
 
 @games_bp.route('/<int:game_id>/start', methods=['POST'])
 @require_auth
-def start_game(game_id):
+def start_game(game_id: int):
     user = g.current_user
     
     game = Game.query.get_or_404(game_id)
@@ -240,7 +241,7 @@ def start_game(game_id):
         return jsonify({'error': 'Game cannot be started'}), 403
     
     # Check if user is participant
-    entry = GameEntry.query.filter_by(user_id=user.id, game_id=game_id).first()
+    entry: Optional[GameEntry] = GameEntry.query.filter_by(user_id=user.id, game_id=game_id).first()
     if not entry:
         return jsonify({'error': 'You are not a participant in this game'}), 403
     
@@ -266,11 +267,11 @@ def start_game(game_id):
                 player_scores[entry.user_id] = random.randint(50, 100)
             
             winner_user_id = ai_opponent.determine_winner(game.game_type, player_scores)
-            winner = next(entry for entry in entries if entry.user_id == winner_user_id)
+            winner: GameEntry = next(entry for entry in entries if entry.user_id == winner_user_id)
         else:
-            winner = random.choice(entries)
+            winner: GameEntry = random.choice(entries)
     else:
-        winner = random.choice(entries)
+        winner: GameEntry = random.choice(entries)
     
     # Update game status
     game.status = 'in_progress'
@@ -327,7 +328,7 @@ def start_game(game_id):
 
 @games_bp.route('/<int:game_id>', methods=['GET'])
 @require_auth
-def get_game_details(game_id):
+def get_game_details(game_id: int):
     user = g.current_user
     
     game = Game.query.get_or_404(game_id)
@@ -368,7 +369,7 @@ def get_game_details(game_id):
 
 @games_bp.route('/<int:game_id>/cancel', methods=['POST'])
 @require_auth
-def cancel_game(game_id):
+def cancel_game(game_id: int):
     user = g.current_user
     
     game = Game.query.get_or_404(game_id)
@@ -461,9 +462,133 @@ def get_my_games():
         }
     }), 200
 
+@games_bp.route('/<int:game_id>/simulate-shot', methods=['POST'])
+@require_auth
+def simulate_shot(game_id: int):
+    """Backend-authoritative shot simulation and validation"""
+    user = g.current_user
+
+    game = Game.query.get_or_404(game_id)
+
+    # Check if user is participant
+    is_participant = GameEntry.query.filter_by(user_id=user.id, game_id=game_id).first() is not None
+    if not is_participant and not user.is_admin:
+        return jsonify({'error': 'Access denied'}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+
+    # Extract shot parameters
+    cue_ball_id = data.get('cue_ball_id', 0)
+    power = float(data.get('power', 0.5))
+    angle = float(data.get('angle', 0))
+    spin = float(data.get('spin', 0))
+
+    # Validate parameters
+    if not (0 <= power <= 1):
+        return jsonify({'error': 'Power must be between 0 and 1'}), 400
+
+    try:
+        # Initialize physics engine with current game state
+        physics_engine = PoolPhysicsEngine()
+
+        # Load current ball positions (would come from game state persistence)
+        # For now, setup standard game - in production, load from database
+        physics_engine.setup_standard_game()
+
+        # Simulate the shot on server
+        result = physics_engine.simulate_shot(cue_ball_id, power, angle, spin)
+
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+
+        # Return authoritative simulation results
+        return jsonify({
+            'success': True,
+            'simulation': {
+                'final_positions': result['balls'],
+                'pocketed_balls': result['pocketed_balls'],
+                'frames_simulated': result['frames_simulated'],
+                'all_stopped': result['all_stopped']
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': f'Simulation failed: {str(e)}'}), 500
+
+@games_bp.route('/<int:game_id>/sync-state', methods=['GET'])
+@require_auth
+def get_physics_state(game_id: int):
+    """Get authoritative game state from server physics engine"""
+    user = g.current_user
+
+    game = Game.query.get_or_404(game_id)
+
+    # Check if user is participant
+    is_participant = GameEntry.query.filter_by(user_id=user.id, game_id=game_id).first() is not None
+    if not is_participant and not user.is_admin:
+        return jsonify({'error': 'Access denied'}), 403
+
+    try:
+        # Initialize physics engine for this game
+        physics_engine = PoolPhysicsEngine()
+        physics_engine.setup_standard_game()  # In production, load from persisted state
+
+        # Return current authoritative state
+        game_state = physics_engine.get_game_state()
+
+        return jsonify({
+            'success': True,
+            'game_state': game_state,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'sync_required': True  # Force client to sync positions
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': f'State retrieval failed: {str(e)}'}), 500
+
+@games_bp.route('/<int:game_id>/update-physics', methods=['POST'])
+@require_auth
+def update_physics_state(game_id: int):
+    """Receive physics updates from authoritative simulation"""
+    user = g.current_user
+
+    game = Game.query.get_or_404(game_id)
+
+    # Check if user is participant
+    is_participant = GameEntry.query.filter_by(user_id=user.id, game_id=game_id).first() is not None
+    if not is_participant and not user.is_admin:
+        return jsonify({'error': 'Access denied'}), 403
+
+    data = request.get_json()
+    if not data or 'simulation' not in data:
+        return jsonify({'error': 'Simulation data required'}), 400
+
+    try:
+        simulation = data['simulation']
+
+        # Validate simulation results
+        if 'final_positions' not in simulation:
+            return jsonify({'error': 'Final positions missing'}), 400
+
+        # Here you would persist the physics state to database
+        # For now, just acknowledge receipt
+        # In production: save ball positions, velocities, pocketed balls to DB
+
+        return jsonify({
+            'success': True,
+            'state_updated': True,
+            'pocketed_balls': simulation.get('pocketed_balls', []),
+            'turn_complete': simulation.get('all_stopped', False)
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': f'Physics update failed: {str(e)}'}), 500
+
 @games_bp.route('/<int:game_id>/ai-move', methods=['POST'])
 @require_auth
-def get_ai_move_suggestion(game_id):
+def get_ai_move_suggestion(game_id: int):
     """Get AI move suggestion for pool game"""
     user = g.current_user
     

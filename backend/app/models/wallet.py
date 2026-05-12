@@ -1,5 +1,5 @@
 from datetime import datetime
-from ..models import db
+from .extensions import db
 
 class Payment(db.Model):
     __tablename__ = 'payments'

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import WalletTransaction, db
+from ..models import WalletTransaction
+from ..models.extensions import db
 from ..auth import require_auth
 from ..services.balance_service import balance_service
 from ..middleware.rate_limiter import rate_limit

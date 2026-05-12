@@ -1,5 +1,5 @@
 from datetime import datetime
-from ..models import db
+from .extensions import db
 
 class Tournament(db.Model):
     __tablename__ = 'tournaments'

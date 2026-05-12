@@ -7,7 +7,7 @@ from sqlalchemy import event
 from sqlalchemy.pool import QueuePool
 
 # Import models package to ensure all models are registered
-from .models import db
+from .models.extensions import db
 from .routes.auth import auth_bp
 from .routes.wallet import wallet_bp
 from .routes.payments import payments_bp

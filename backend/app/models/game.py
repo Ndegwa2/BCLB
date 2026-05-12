@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from ..models import db
 
 class Game(db.Model):
@@ -15,8 +15,8 @@ class Game(db.Model):
     stake_amount = db.Column(db.Numeric(10, 2), nullable=False)
     total_pot = db.Column(db.Numeric(10, 2), default=0)
     status = db.Column(db.String(20), default='waiting', index=True)  # 'waiting', 'in_progress', 'completed', 'cancelled'
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     allow_ai = db.Column(db.Boolean, default=False)  # Allow AI opponents
     ai_opponent_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # ID of AI opponent

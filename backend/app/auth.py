@@ -2,24 +2,27 @@ import jwt
 import datetime
 import os
 from functools import wraps
+from typing import Callable, TypeVar, Any, Optional
 from flask import request, jsonify, g
 from .models import User
+
+F = TypeVar('F', bound=Callable[..., Any])
 
 JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24
 
-def generate_token(user_id):
+def generate_token(user_id: int) -> str:
     """Generate JWT token for user"""
-    payload = {
+    payload: dict[str, Any] = {
         'user_id': user_id,
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=JWT_EXPIRATION_HOURS),
-        'iat': datetime.datetime.utcnow()
+        'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=JWT_EXPIRATION_HOURS),
+        'iat': datetime.datetime.now(datetime.timezone.utc)
     }
     token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return token
 
-def decode_token(token):
+def decode_token(token: str) -> Optional[dict[str, Any]]:
     """Decode and validate JWT token"""
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
@@ -43,21 +46,21 @@ def get_current_user():
     user = User.query.get(payload['user_id'])
     return user
 
-def require_auth(f):
+def require_auth(f: F) -> F:
     """Decorator to require authentication for routes"""
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> Any:
         user = get_current_user()
         if not user:
             return jsonify({'error': 'Invalid token'}), 401
         g.current_user = user
         return f(*args, **kwargs)
-    return decorated_function
+    return decorated_function  # type: ignore
 
-def require_admin(f):
+def require_admin(f: F) -> F:
     """Decorator to require admin privileges"""
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args: Any, **kwargs: Any) -> Any:
         user = get_current_user()
         if not user:
             return jsonify({'error': 'Invalid token'}), 401
@@ -65,4 +68,4 @@ def require_admin(f):
             return jsonify({'error': 'Admin access required'}), 403
         g.current_user = user
         return f(*args, **kwargs)
-    return decorated_function
+    return decorated_function  # type: ignore

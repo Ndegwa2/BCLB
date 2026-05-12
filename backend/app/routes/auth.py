@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import User, db
+from ..models import User
+from ..models.extensions import db
 from ..auth import generate_token, require_auth
 import re
 

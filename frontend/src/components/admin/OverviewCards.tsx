@@ -104,15 +104,6 @@ const OverviewCards: React.FC = () => {
       glowColor: 'rgba(37, 99, 235, 0.3)'
     },
     {
-      title: 'Active Games',
-      value: overview?.active_games || '0',
-      change: recentActivity ? `+${recentActivity.games_created_24h} today` : undefined,
-      changeType: 'positive',
-      icon: Gamepad2,
-      gradient: 'from-purple-600 to-pink-600',
-      glowColor: 'rgba(147, 51, 234, 0.3)'
-    },
-    {
       title: 'Tournaments',
       value: overview?.total_tournaments || '0',
       change: 'Total events',

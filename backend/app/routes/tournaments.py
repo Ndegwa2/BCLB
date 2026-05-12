@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import Tournament, TournamentEntry, User, Game, WalletTransaction, db
+from ..models import Tournament, TournamentEntry, User, Game, WalletTransaction
+from ..models.extensions import db
 from ..auth import require_auth, require_admin
 from sqlalchemy import func
 import random

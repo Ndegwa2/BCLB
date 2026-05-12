@@ -1,11 +1,10 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { 
-  LayoutDashboard, 
-  Users, 
-  Gamepad2, 
-  Trophy, 
+import {
+  LayoutDashboard,
+  Users,
+  Trophy,
   Wallet,
   Shield,
   ChevronRight
@@ -24,7 +23,6 @@ const AdminSidebar: React.FC = () => {
   const menuItems: SidebarItem[] = [
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard, color: 'from-purple-500 to-pink-500' },
     { name: 'Users', path: '/admin/users', icon: Users, color: 'from-blue-500 to-cyan-500' },
-    { name: 'Games', path: '/admin/games', icon: Gamepad2, color: 'from-emerald-500 to-green-500' },
     { name: 'Tournaments', path: '/admin/tournaments', icon: Trophy, color: 'from-amber-500 to-orange-500' },
     { name: 'Wallet', path: '/admin/wallet', icon: Wallet, color: 'from-pink-500 to-rose-500' },
   ]

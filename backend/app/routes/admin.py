@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import User, Game, Tournament, Payment, WalletTransaction, GameEntry, TournamentEntry, db
+from ..models import User, Game, Tournament, Payment, WalletTransaction, GameEntry, TournamentEntry
+from ..models.extensions import db
 from ..auth import require_admin
 from ..services.balance_service import balance_service
 from ..middleware.rate_limiter import rate_limit

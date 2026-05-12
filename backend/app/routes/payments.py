@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import Payment, WalletTransaction, User, db
+from ..models import Payment, WalletTransaction, User
+from ..models.extensions import db
 from ..auth import require_auth
 import random
 import string

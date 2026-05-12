@@ -5,9 +5,13 @@ Manages request queues to prevent system overload.
 import time
 import threading
 from functools import wraps
+from typing import Callable, TypeVar, Any, Optional
 from flask import request, jsonify, g
 from collections import defaultdict
 import logging
+from werkzeug.wrappers import Response
+
+F = TypeVar('F', bound=Callable[..., Any])
 
 logger = logging.getLogger(__name__)
 
